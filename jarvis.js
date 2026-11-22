@@ -22,7 +22,8 @@
     xai: { label: 'xAI (Grok)', baseUrl: 'https://api.x.ai/v1', model: 'grok-3-mini' },
     custom: { label: 'Custom (OpenAI-compatible)', baseUrl: '', model: '' }
   };
-  var OWNERS = ['Executive', 'Contract Scout', 'Partner Scout', 'Financial', 'Compliance', 'Operations', 'Trading'];
+  var OWNERS = ['Executive', 'Contract Scout', 'Partner Scout', 'Financial', 'Compliance', 'Operations', 'Trading', 'Trend Researcher', 'Scriptwriter', 'Voiceover Producer', 'Video Editor', 'Thumbnail & Title Designer', 'Upload/SEO Manager', 'Analytics'];
+  var lastIdeas = [], lastScript = null;
   // command word -> [element id, label]
   var SECTIONS = {
     'overview': ['overview', 'Overview'], 'kpis': ['overview', 'Overview'], 'home': ['overview', 'Overview'], 'dashboard': ['overview', 'Overview'],
@@ -31,6 +32,7 @@
     'trading': ['trading', 'Trading Lab'], 'trades': ['trading', 'Trading Lab'], 'market': ['trading', 'Trading Lab'], 'positions': ['trading', 'Trading Lab'],
     'agents': ['agents', 'Agents & Assignments'], 'tasks': ['taskform', 'Agent Assignment Board'], 'assignments': ['taskform', 'Agent Assignment Board'], 'board': ['taskform', 'Agent Assignment Board'],
     'approvals': ['approvals-sec', 'CEO Approval Queue'], 'approval': ['approvals-sec', 'CEO Approval Queue'],
+    'youtube': ['swm', 'Street Wise Money'], 'swm': ['swm', 'Street Wise Money'], 'street': ['swm', 'Street Wise Money'], 'channel': ['swm', 'Street Wise Money'], 'videos': ['swm', 'Street Wise Money'], 'bible': ['yt-bible', 'Channel bible'],
     'activity': ['activity-sec', 'Agent Activity'], 'connection': ['activity-sec', 'Agent Activity'], 'log': ['activity-sec', 'Agent Activity']
   };
   var AGENT_INFO = {
@@ -61,7 +63,7 @@
     try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch (e) {}
     return {
       provider: s.provider || 'openai', baseUrl: s.baseUrl || '', model: s.model || '', apiKey: s.apiKey || '',
-      speak: s.speak !== false, useAi: s.useAi !== false
+      speak: s.speak !== false, useAi: s.useAi !== false, persona: s.persona === 'streetwise' ? 'streetwise' : 'classic', full: !!s.full
     };
   }
   var settings = loadSettings();
@@ -83,8 +85,11 @@
     el.fab = h('button', { id: 'jarvis-fab', type: 'button', title: 'Jarvis assistant (Ctrl+J)', 'aria-label': 'Open Jarvis assistant' }, '🤖');
     el.panel = h('div', { id: 'jarvis-panel', role: 'dialog', 'aria-label': 'Jarvis assistant' });
     el.panel.innerHTML =
-      '<div class="jv-head"><div><div class="jv-title"><span>J</span>ARVIS</div><div class="jv-sub" id="jv-mode"></div></div>' +
-      '<div><button type="button" id="jv-voice" title="Spoken replies on/off"></button> ' +
+      '<div class="jv-scan"></div>' +
+      '<div class="jv-head"><div><div class="jv-title"><span>J</span>.A.R.V.I.S</div><div class="jv-sub" id="jv-mode"></div></div>' +
+      '<div><button type="button" id="jv-persona" title="Switch personality: Classic / Street Wise"></button> ' +
+      '<button type="button" id="jv-voice" title="Spoken replies on/off"></button> ' +
+      '<button type="button" id="jv-full" title="Full-screen HUD">⛶</button> ' +
       '<button type="button" id="jv-gear" title="AI brain settings">⚙</button> ' +
       '<button type="button" id="jv-close" title="Close">✕</button></div></div>' +
       '<div class="jv-settings" id="jv-settings">' +
@@ -97,22 +102,38 @@
       '<div class="jv-row"><button type="button" id="jv-save">Save</button><button type="button" id="jv-test">Test connection</button><button type="button" id="jv-forget" class="danger">Forget key</button></div>' +
       '<div class="note">Your key is stored only in this browser (localStorage) and sent only to the base URL above. It is never saved to the repo or the dashboard server. Anyone using this browser profile could read it, so use a restricted key and a shared/public computer is not recommended.</div>' +
       '</div>' +
+      '<div class="jv-core-wrap"><div class="jv-core" id="jv-core" role="button" tabindex="0" title="Tap the core to talk">' +
+      '<svg class="jv-orb" viewBox="0 0 600 600" aria-hidden="true"><defs>' +
+      '<radialGradient id="jv-core-grad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#e6f6ff"/><stop offset="25%" stop-color="#4fc3ff"/><stop offset="60%" stop-color="#1e6fff"/><stop offset="100%" stop-color="#0a1a40" stop-opacity="0"/></radialGradient>' +
+      '<filter id="jv-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>' +
+      '<circle class="o-r1" cx="300" cy="300" r="250" fill="none" style="stroke:var(--jv-ring1)" stroke-width="4" stroke-dasharray="40 14" filter="url(#jv-glow)"/>' +
+      '<circle class="o-thin" cx="300" cy="300" r="215" fill="none" stroke="#1e90ff" stroke-width="2"/>' +
+      '<circle class="o-r2" cx="300" cy="300" r="190" fill="none" style="stroke:var(--jv-ring2)" stroke-width="6" stroke-dasharray="120 30 20 30" filter="url(#jv-glow)"/>' +
+      '<g class="o-core"><circle cx="300" cy="300" r="160" fill="url(#jv-core-grad)" filter="url(#jv-glow)"/>' +
+      '<circle cx="300" cy="300" r="160" fill="none" style="stroke:var(--jv-ring3)" stroke-width="3" filter="url(#jv-glow)"/>' +
+      '<circle cx="300" cy="300" r="70" fill="#bfe9ff" opacity="0.85" filter="url(#jv-glow)"/></g></svg>' +
+      '</div><div class="jv-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="jv-state" id="jv-state" aria-live="polite">Online</div></div>' +
       '<div class="jv-log" id="jv-log" aria-live="polite"></div>' +
       '<div class="jv-chips" id="jv-chips"></div>' +
       '<form class="jv-bar" id="jv-form"><button type="button" class="jv-mic" id="jv-mic" title="Speak to Jarvis">🎙</button>' +
       '<input id="jv-input" placeholder="Ask Jarvis… (try “help”)" autocomplete="off"><button id="jv-send">Send</button></form>';
     document.body.appendChild(el.fab);
     document.body.appendChild(el.panel);
-    ['mode', 'voice', 'gear', 'close', 'settings', 'provider', 'base', 'model', 'key', 'useai', 'save', 'test', 'forget', 'log', 'chips', 'form', 'mic', 'input'].forEach(function (k) { el[k] = document.getElementById('jv-' + k); });
+    ['mode', 'persona', 'full', 'core', 'state', 'voice', 'gear', 'close', 'settings', 'provider', 'base', 'model', 'key', 'useai', 'save', 'test', 'forget', 'log', 'chips', 'form', 'mic', 'input'].forEach(function (k) { el[k] = document.getElementById('jv-' + k); });
 
     Object.keys(PROVIDERS).forEach(function (k) { el.provider.appendChild(h('option', { value: k }, PROVIDERS[k].label)); });
-    ['Briefing', 'Deadlines', 'Show pipeline', 'Approvals', 'Positions', 'Help'].forEach(function (c) {
+    ['Briefing', 'YouTube status', 'Video pipeline', 'Give me 5 video ideas', 'Approvals', 'Help'].forEach(function (c) {
       var b = h('button', { type: 'button' }, c);
       b.onclick = function () { handle(c); };
       el.chips.appendChild(b);
     });
 
     el.fab.onclick = toggle;
+    el.persona.onclick = function () { setPersona(settings.persona === 'streetwise' ? 'classic' : 'streetwise', true); };
+    el.full.onclick = function () { setFull(!el.panel.classList.contains('jv-full')); };
+    el.core.onclick = toggleListening;
+    el.core.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleListening(); } };
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && el.panel.classList.contains('jv-full')) setFull(false); });
     el.close.onclick = toggle;
     el.gear.onclick = function () { fillSettings(); el.settings.classList.toggle('open'); };
     el.voice.onclick = function () { settings.speak = !settings.speak; storeSettings(); if (!settings.speak) stopSpeaking(); refreshHeader(); };
@@ -128,8 +149,36 @@
     document.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && (e.key === 'j' || e.key === 'J')) { e.preventDefault(); toggle(); } });
     if (!Recognition) { el.mic.title = 'Voice input is not supported in this browser (try Chrome, Edge or Safari)'; el.mic.style.opacity = '.45'; }
 
+    applyPersona(); setFull(!!settings.full && window.innerWidth > 700, true); setState('idle');
     refreshHeader();
     restoreChat();
+  }
+
+  // ---------- HUD state, personality, full screen ----------
+  var hudState = 'idle';
+  var STATE_LABEL = { idle: 'Online', listening: 'Listening…', speaking: 'Speaking', thinking: 'Thinking…' };
+  function setState(st) {
+    hudState = st;
+    ['idle', 'listening', 'speaking', 'thinking'].forEach(function (k) { el.panel.classList.toggle('st-' + k, k === st); });
+    el.fab.classList.toggle('listening', st === 'listening');
+    el.state.textContent = STATE_LABEL[st] + (st === 'idle' ? ' · ' + (settings.persona === 'streetwise' ? 'Street Wise' : 'Classic') : '');
+  }
+  function applyPersona() {
+    var sw = settings.persona === 'streetwise';
+    el.panel.classList.toggle('p-streetwise', sw); el.fab.classList.toggle('p-streetwise', sw);
+    el.persona.textContent = sw ? '💵' : '💠';
+    el.persona.title = 'Personality: ' + (sw ? 'Street Wise' : 'Classic') + ' — click to switch';
+    if (hudState === 'idle') setState('idle');
+  }
+  function setPersona(p, announce) {
+    settings.persona = p === 'streetwise' ? 'streetwise' : 'classic'; storeSettings(); applyPersona();
+    if (announce) say(settings.persona === 'streetwise' ? 'Street Wise mode on. Let’s get this money right — practical moves, no fluff.' : 'Classic mode restored. At your service.');
+  }
+  function setFull(on, quiet) {
+    el.panel.classList.toggle('jv-full', !!on);
+    el.full.textContent = on ? '–' : '⛶'; el.full.title = on ? 'Exit full screen (Esc)' : 'Full-screen HUD';
+    if (!quiet) { settings.full = !!on; storeSettings(); }
+    scrollLog();
   }
 
   function fillSettings() {
@@ -180,7 +229,7 @@
     if (saved.length) {
       saved.forEach(function (m) { addMsg(m.role === 'user' ? 'user' : 'bot', m.content); });
     } else {
-      addMsg('bot', 'Good ' + partOfDay() + '. I am Jarvis, your Vanguard command assistant. Say or type “help” to see what I can do, or “briefing” for a status report.');
+      addMsg('bot', settings.persona === 'streetwise' ? 'What’s good. Jarvis here, Street Wise mode. Say “youtube status”, “briefing”, or “help” — let’s make some smart money moves.' : 'Good ' + partOfDay() + '. I am Jarvis, your Vanguard command assistant. Say or type “help” to see what I can do, or “briefing” for a status report.');
     }
   }
   function partOfDay() { var hr = new Date().getHours(); return hr < 12 ? 'morning' : hr < 18 ? 'afternoon' : 'evening'; }
@@ -197,7 +246,7 @@
     recog.interimResults = true;
     recog.maxAlternatives = 1;
     var finalText = '';
-    recog.onstart = function () { listening = true; el.mic.classList.add('on'); el.fab.classList.add('listening'); el.input.placeholder = 'Listening…'; };
+    recog.onstart = function () { listening = true; el.mic.classList.add('on'); setState('listening'); el.input.placeholder = 'Listening…'; };
     recog.onresult = function (e) {
       var interim = '';
       for (var i = e.resultIndex; i < e.results.length; i++) {
@@ -207,7 +256,7 @@
     };
     recog.onerror = function (e) { if (e.error !== 'no-speech' && e.error !== 'aborted') sys('Voice input error: ' + e.error + (e.error === 'not-allowed' ? ' (allow microphone access for this page)' : '')); };
     recog.onend = function () {
-      listening = false; el.mic.classList.remove('on'); el.fab.classList.remove('listening'); el.input.placeholder = 'Ask Jarvis… (try “help”)';
+      listening = false; el.mic.classList.remove('on'); if (hudState === 'listening') setState('idle'); el.input.placeholder = 'Ask Jarvis… (try “help”)';
       var t = (finalText || el.input.value).trim();
       if (t) { el.input.value = ''; handle(t); }
     };
@@ -229,10 +278,13 @@
       var u = new SpeechSynthesisUtterance(String(text).replace(/[•·]/g, ',').replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu, '').slice(0, 1200));
       var v = pickVoice(); if (v) u.voice = v;
       u.rate = 1.02; u.pitch = 0.95;
+      u.onstart = function () { setState('speaking'); };
+      u.onend = u.onerror = function () { if (hudState === 'speaking') setState('idle'); };
+      if (settings.persona === 'streetwise') { u.rate = 1.06; u.pitch = 0.9; }
       speechSynthesis.speak(u);
     } catch (e) {}
   }
-  function stopSpeaking() { try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {} }
+  function stopSpeaking() { try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {} if (el.panel && hudState === 'speaking') setState('idle'); }
 
   // ---------- dashboard helpers ----------
   function V() { return window.Vanguard || null; }
@@ -271,6 +323,7 @@
       '• Paper trading: balance ' + money(k.balance) + ', ' + k.openTrades + ' open (' + money(k.openPnl) + ' unrealised), ' + k.closedTrades + ' closed' + (k.tradeWinRate != null ? ', ' + k.tradeWinRate + '% winners' : '') + '. Sim price ' + v.sim.price().toFixed(5) + '.',
       '• Connection: ' + conn + '.'
     ];
+    if (v.ytStatus) { var y = v.ytStatus(); lines.splice(lines.length - 1, 0, '• Street Wise Money: ' + y.inProduction + ' video' + (y.inProduction === 1 ? '' : 's') + ' in production, ' + y.byStage.Published + ' published' + (y.awaiting.length ? ', ' + y.awaiting.length + ' awaiting your upload approval' : '') + (y.readyToUpload.length ? ', ' + y.readyToUpload.length + ' approved and ready to upload' : '') + (y.stats.subscribers != null ? ', ' + Number(y.stats.subscribers).toLocaleString() + ' subscribers (as you entered)' : '') + '.'); }
     if (k.approvals) lines.push('Next step: review the approval queue — say “approvals”.');
     else if (dl.some(function (x) { return x.d < 0; })) lines.push('Next step: something is overdue — say “deadlines”.');
     else if (!d.opps.length) lines.push('Next step: add your first contract, e.g. “add cleaning opportunity Pensacola federal building $4000 due in 14 days”.');
@@ -289,6 +342,14 @@
       '• “buy 0.2 lots stop 20 target 40” (pips) · “sell …”',
       '• “positions” · “close trade 1” · “close all” · “account”',
       '• “position size 1% 20 pips”',
+      'STREET WISE MONEY (YouTube)',
+      '• “youtube status” · “video pipeline” · “channel bible”',
+      '• “add video idea <title> [about <topic>] [publish YYYY-MM-DD | in N days]”',
+      '• “move <video> to script / voiceover / edit / thumbnail / approval / scheduled / published”',
+      '• “approve video <video>” (required before Scheduled/Published)',
+      '• “set subscribers 1200”, “set views 15000”, “set revenue 42”, “set videos published 3”',
+      '• “assign Scriptwriter to …” (also Trend Researcher, Voiceover Producer, Video Editor, Thumbnail & Title Designer, Upload/SEO Manager, Analytics)',
+      '• With the AI brain: “give me 5 video ideas [about credit]”, “write a script about …”, then “save idea 2”, “save all ideas”, “save script [to <video>]”',
       'AGENTS & TASKS',
       '• “assign <agent> to <task>” · “add task <task>” · “open tasks”',
       '• “send <task> for approval” · “mark <task> done” · “approvals”',
@@ -296,6 +357,7 @@
       'OTHER',
       '• “go to contracts / trading / agents / approvals / overview / activity”',
       '• “time”, “export”, “voice on/off”, “stop”, “clear chat”, “settings”',
+      '• HUD: “street wise mode” / “classic mode”, “full screen” / “exit full screen” (or ⛶, Esc), tap the core to talk',
       aiReady() ? 'AI brain is ON — anything else goes to ' + PROVIDERS[settings.provider].label + '. Start with “ask …” to force it.' : 'AI brain is OFF. Tap ⚙ to add your own OpenAI or xAI key for open-ended questions.',
       'I never submit bids, contact anyone, or place real trades.'
     ].join('\n');
@@ -317,7 +379,13 @@
   }
   function listApprovals() {
     var a = getDb().tasks.filter(function (t) { return t.status === 'Needs approval'; });
-    if (!a.length) return 'Nothing is waiting for your approval.';
+    var vids = (getDb().videos || []).filter(function (x) { return x.stage === 'Approval' && !x.approved; });
+    var vtxt = vids.length ? 'Street Wise Money videos awaiting upload approval:\n' + vids.map(function (x) { return '• ' + x.title; }).join('\n') + '\nSay “approve video <name>”.' : '';
+    if (!a.length) return vtxt || 'Nothing is waiting for your approval.';
+    if (vtxt) return vtxt + '\n' + listApprovalsTasks(a);
+    return listApprovalsTasks(a);
+  }
+  function listApprovalsTasks(a) {
     return a.length + ' item' + (a.length > 1 ? 's' : '') + ' awaiting approval:\n' + a.map(function (t, i) { return (i + 1) + '. ' + t.name + ' (' + t.owner + ')'; }).join('\n') + '\nSay “mark <task words> done” after you review one.';
   }
   function openTradesList() { return getDb().trades.filter(function (t) { return t.status !== 'Closed'; }); }
@@ -376,6 +444,13 @@
     if (/scout/.test(q) && /contract/.test(q)) return 'Contract Scout';
     if (/scout/.test(q) && /partner/.test(q)) return 'Partner Scout';
     if (/^(me|ceo|exec)/.test(q)) return 'Executive';
+    if (/trend|research|topic/.test(q)) return 'Trend Researcher';
+    if (/script|writer/.test(q)) return 'Scriptwriter';
+    if (/voice|narrat|audio/.test(q)) return 'Voiceover Producer';
+    if (/editor|editing|video edit/.test(q)) return 'Video Editor';
+    if (/thumb|title|design/.test(q)) return 'Thumbnail & Title Designer';
+    if (/upload|seo|publish/.test(q)) return 'Upload/SEO Manager';
+    if (/analytic|stats/.test(q)) return 'Analytics';
     return null;
   }
   function tradingCommand(q) {
@@ -412,6 +487,142 @@
     return undefined;
   }
 
+  // ---------- Street Wise Money ----------
+  var VSTAGE_WORDS = { 'idea': 'Idea', 'ideas': 'Idea', 'script': 'Script', 'scripting': 'Script', 'voiceover': 'Voiceover', 'voice over': 'Voiceover', 'voice': 'Voiceover', 'vo': 'Voiceover', 'edit': 'Edit', 'editing': 'Edit', 'thumbnail': 'Thumbnail', 'thumbnails': 'Thumbnail', 'approval': 'Approval', 'review': 'Approval', 'scheduled': 'Scheduled', 'schedule': 'Scheduled', 'published': 'Published', 'publish': 'Published', 'live': 'Published' };
+  function matchVideo(words) {
+    var q = words.toLowerCase().replace(/^(the\s+)?(video|episode|ep)\s+/, '').replace(/["“”]/g, '').trim();
+    if (!q) return null;
+    var vids = getDb().videos || [];
+    var num = q.match(/^#?0*(\d+)$/);
+    if (num) { var byEp = vids.find(function (v) { return new RegExp('episode 0*' + num[1] + '\\b', 'i').test(v.topic + ' ' + v.title); }); return byEp || vids[parseInt(num[1], 10) - 1] || null; }
+    return vids.find(function (v) { return v.title.toLowerCase().indexOf(q) !== -1; }) ||
+      vids.find(function (v) { return q.split(/\s+/).every(function (w) { return (v.title + ' ' + (v.topic || '')).toLowerCase().indexOf(w) !== -1; }); }) || null;
+  }
+  function ytStatusText() {
+    var v = V(), y = v.ytStatus(), st = y.stats;
+    var lines = ['Street Wise Money (@streetwisemoney):'];
+    lines.push('• Pipeline: ' + v.VIDEO_STAGES.map(function (s) { return s + ' ' + y.byStage[s]; }).join(' · ') + '.');
+    if (y.awaiting.length) lines.push('• Awaiting your upload approval: ' + y.awaiting.map(function (x) { return x.title; }).join('; ') + '.');
+    if (y.readyToUpload.length) lines.push('• Approved and ready to upload: ' + y.readyToUpload.map(function (x) { return x.title; }).join('; ') + '.');
+    if (y.next) lines.push('• Next target release: ' + y.next.title + ' on ' + y.next.publish + '.');
+    lines.push(st.updated ? '• Stats you entered (' + new Date(st.updated).toLocaleDateString() + '): ' + [['subscribers', 'subscribers'], ['views', 'views'], ['published', 'videos published']].map(function (f) { return (st[f[0]] != null ? Number(st[f[0]]).toLocaleString() : '—') + ' ' + f[1]; }).join(', ') + (st.revenue != null ? ', ' + money(st.revenue) + ' revenue (28 days)' : '') + '.' : '• Channel stats: not entered yet — say “set subscribers 120” etc. I don’t pull live YouTube numbers.');
+    lines.push('• Open channel tasks: ' + y.ytTasks + '. Cadence goal: 2 long videos (Tue & Fri) + 3–5 Shorts per week.');
+    return lines.join('\n');
+  }
+  function ytCommand(q, t) {
+    var v = V(), m;
+    if (!v || !v.ytStatus) return undefined;
+    if (/^(youtube|yt|channel|street ?wise( money)?|swm)\s*(status|update|report|summary|stats)?$/.test(q) || /^how'?s (the )?(channel|youtube)/.test(q)) { goTo('swm'); return ytStatusText(); }
+    if (/^(video pipeline|videos|content pipeline|show videos|list videos|youtube pipeline)$/.test(q)) {
+      goTo('swm'); var vids = getDb().videos;
+      return vids.length ? 'Video pipeline (' + vids.length + '):\n' + vids.map(function (x, i) { return (i + 1) + '. ' + x.title + ' — ' + x.stage + (x.stage === 'Approval' ? (x.approved ? ' ✅ approved' : ' ⏳ needs approval') : '') + (x.publish ? ', target ' + x.publish : '') + (x.topic ? ' · ' + x.topic : ''); }).join('\n') : 'No videos yet. Try “add video idea Credit score myths about credit”.';
+    }
+    if (/^(channel bible|bible|brand guide|style guide)$/.test(q)) { goTo('bible'); var b = v.CHANNEL_BIBLE; return 'Channel bible — ' + b.handle + '\nMission: ' + b.mission + '\nAudience: ' + b.audience + '\nTone: ' + b.tone + '\nFormula: ' + b.formula + '\nCadence: ' + b.cadence + '\nRule: ' + b.rule; }
+    // add video idea
+    if ((m = t.match(/^(?:add|new|create|save)\s+(?:a\s+)?(?:youtube\s+)?(?:video\s+idea|video|idea)\s*[:\-]?\s*(.+)$/i)) && !/^\d+$/.test(m[1].trim()) && !/^(ideas?)\b/i.test(m[1])) {
+      var rest = m[1].trim(), topic = '', publish = '';
+      var pm = rest.match(/\s+(?:publish(?:ing)?|release|due|on)\s+(?:on\s+)?(\d{4}-\d{2}-\d{2}|in\s+\d+\s+days?|tomorrow)$/i);
+      if (pm) { publish = parseDue(pm[1]); rest = rest.slice(0, pm.index).trim(); }
+      var tm = rest.match(/\s+(?:about|topic|on|pillar)\s*:?\s+(.+)$/i);
+      if (tm) { topic = tm[1].trim(); rest = rest.slice(0, tm.index).trim(); }
+      rest = rest.replace(/^["“]|["”]$/g, '');
+      var nv = v.addVideo({ title: rest, topic: topic, publish: publish });
+      if (!nv) return 'What is the video called?';
+      goTo('swm');
+      return 'Added to the Street Wise Money pipeline as an Idea: “' + nv.title + '”' + (topic ? ' (' + topic + ')' : '') + (publish ? ', target publish ' + publish : '') + '. Next: “assign Scriptwriter to script ' + nv.title + '” or “write a script about ' + (topic || nv.title) + '”.';
+    }
+    // approve video
+    if ((m = q.match(/^(?:approve|ok|okay|greenlight)\s+(?:the\s+)?(?:video|episode|upload(?: of)?)\s+(.+)$/)) || (m = q.match(/^approve\s+(.+?)\s+(?:for upload|upload)$/))) {
+      var av = matchVideo(m[1]); if (!av) return 'I could not find a video matching “' + m[1] + '”. Say “video pipeline” to see them.';
+      if (av.stage !== 'Approval' && v.VIDEO_STAGES.indexOf(av.stage) < v.VIDEO_STAGES.indexOf('Approval')) v.setVideoStage(av.id, 'Approval');
+      v.approveVideo(av.id, true); goTo('swm');
+      return 'Approved “' + av.title + '” for upload — recorded on the dashboard. I can’t upload to YouTube myself; publish it in YouTube Studio, then say “move ' + av.title.split(':')[0].toLowerCase() + ' to published”.';
+    }
+    if ((m = q.match(/^(?:unapprove|revoke approval(?: for)?|withdraw approval(?: for)?)\s+(?:the\s+)?(?:video\s+)?(.+)$/))) {
+      var uv = matchVideo(m[1]); if (!uv) return 'I could not find that video.'; v.approveVideo(uv.id, false); return 'Approval withdrawn for “' + uv.title + '”.';
+    }
+    // move video stage
+    if ((m = q.match(/^(?:move|set|change|advance|push|mark)\s+(.+?)\s+(?:to|as|stage to|into)\s+(idea|script|scripting|voice ?over|voice|vo|edit|editing|thumbnails?|approval|review|scheduled|schedule|published|publish|live)$/)) ||
+        (m = q.match(/^(?:mark\s+)?(.+?)\s+(?:as\s+)?(scheduled|published)$/))) {
+      var mv = matchVideo(m[1]);
+      if (mv) {
+        var stg = VSTAGE_WORDS[m[2].replace(/\s+/, ' ')] || VSTAGE_WORDS[m[2].replace(/\s+/g, '')];
+        var res = v.setVideoStage(mv.id, stg); goTo('swm');
+        if (res && res.blocked) return '🔒 “' + mv.title + '” needs your approval before it can be ' + stg + '. I parked it in Approval. Say “approve video ' + mv.title.split(':')[0].toLowerCase() + '” when you’re ready.';
+        return '“' + mv.title + '” moved to ' + stg + '.' + (stg === 'Published' ? ' Nice — update your numbers any time with “set subscribers …”.' : '');
+      }
+    }
+    // manual KPIs
+    if ((m = q.match(/^(?:set|update|log|record)\s+(?:my\s+)?(?:youtube\s+|channel\s+)?(subscribers?|subs|views|total views|videos published|published videos|published|revenue|earnings)\s*(?:to|=|:|at)?\s*\$?([\d,.]+)\s*(k|m)?$/))) {
+      var field = /sub/.test(m[1]) ? 'subscribers' : /view/.test(m[1]) ? 'views' : /publish/.test(m[1]) ? 'published' : 'revenue';
+      var num2 = parseFloat(m[2].replace(/,/g, '')) * (m[3] === 'k' ? 1000 : m[3] === 'm' ? 1e6 : 1);
+      var o = {}; o[field] = num2; v.updateYt(o); goTo('swm');
+      return 'Recorded ' + (field === 'revenue' ? '$' + num2.toFixed(2) + ' revenue (last 28 days)' : Number(num2).toLocaleString() + ' ' + (field === 'published' ? (num2 === 1 ? 'video published' : 'videos published') : field)) + ' for Street Wise Money (entered by you).';
+    }
+    // save AI output
+    if ((m = q.match(/^(?:save|add)\s+(?:video\s+)?idea\s*#?(\d+)$/))) {
+      var idea = lastIdeas[parseInt(m[1], 10) - 1]; if (!idea) return lastIdeas.length ? 'There are only ' + lastIdeas.length + ' ideas in the last list.' : 'Ask me for ideas first, e.g. “give me 5 video ideas about credit”.';
+      var sv = v.addVideo({ title: idea.title, topic: idea.topic }); goTo('swm'); return 'Saved idea ' + m[1] + ' to the pipeline: “' + sv.title + '”.';
+    }
+    if (/^(?:save|add) all (?:video )?ideas$/.test(q)) {
+      if (!lastIdeas.length) return 'Ask me for ideas first, e.g. “give me 5 video ideas”.';
+      lastIdeas.forEach(function (i2) { v.addVideo({ title: i2.title, topic: i2.topic }); }); goTo('swm');
+      var n = lastIdeas.length; lastIdeas = []; return 'Saved ' + n + ' ideas to the Idea column.';
+    }
+    if ((m = q.match(/^save (?:the |that )?script(?:\s+(?:to|for|on)\s+(.+))?$/))) {
+      if (!lastScript) return 'There is no script to save yet. Say “write a script about …” (needs the AI brain).';
+      var target = m[1] ? matchVideo(m[1]) : (getDb().videos || []).find(function (x) { return x.title.toLowerCase() === lastScript.topic.toLowerCase(); });
+      if (m[1] && !target) return 'I could not find a video matching “' + m[1] + '”.';
+      if (!target) target = v.addVideo({ title: lastScript.topic.charAt(0).toUpperCase() + lastScript.topic.slice(1), topic: 'Script by Jarvis', stage: 'Script' });
+      v.setVideoScript(target.id, lastScript.text);
+      if (target.stage === 'Idea') v.setVideoStage(target.id, 'Script');
+      goTo('swm'); return 'Script saved to “' + target.title + '” (stage: Script). Open it with the 📝 button on its card.';
+    }
+    // AI-powered content
+    if ((m = q.match(/^(?:give me|generate|brainstorm|suggest|come up with|i need)\s+(\d+)?\s*(?:new\s+|more\s+|youtube\s+|video\s+)*(?:video\s+)?(?:ideas?|topics?)(?:\s+(?:about|on|for)\s+(.+))?$/))) {
+      var count = Math.min(10, parseInt(m[1] || '5', 10)), about = m[2] || '';
+      if (!aiReady()) return offlineIdeas(count, about);
+      askAi('Give me ' + count + ' new long-form video ideas for Street Wise Money' + (about ? ' about ' + about : '') + '. Use the channel bible. Format each as one line: "N. Title — pillar — one-sentence angle". Avoid ideas already in the pipeline. No intro or outro text.', {
+        maxTokens: 700, speakText: 'Here are ' + count + ' ideas. Say save idea and a number to add one to the pipeline.',
+        onReply: function (r) { lastIdeas = parseIdeas(r); return r + (lastIdeas.length ? '\n\nSay “save idea 2” or “save all ideas” to add them to the pipeline.' : ''); } });
+      return null;
+    }
+    if ((m = t.match(/^(?:write|draft|create|generate)\s+(?:me\s+)?(?:a\s+|the\s+)?(?:(short|shorts|long|long-form)\s+)?(?:youtube\s+|video\s+)?script\s+(?:about|on|for)\s+(.+)$/i))) {
+      var isShort = /short/i.test(m[1] || ''), topic2 = m[2].trim().replace(/[.?!]$/, '');
+      if (!aiReady()) return offlineScriptOutline(topic2, isShort);
+      askAi((isShort ? 'Write a 45–60 second YouTube Shorts voiceover script' : 'Write a complete 6–8 minute long-form YouTube voiceover script (about 1,000–1,200 words)') + ' for Street Wise Money about: ' + topic2 + '. Follow the channel formula exactly with labelled sections: Hook, Problem, Explanation, Example, Action plan, Recap, plus a short subscribe call to action. Written to be spoken by the avatar host in a confident, smooth, urban, practical voice. Relatable examples with realistic numbers. No fake wealth promises, no personalised financial advice; include a one-line "educational, not financial advice" note at the end. Then add 3 title options and a thumbnail text idea.', {
+        maxTokens: isShort ? 600 : 2200, speakText: 'Your script about ' + topic2 + ' is ready in the chat. Say save script to keep it with a video.',
+        onReply: function (r) { lastScript = { topic: topic2, text: r }; return r + '\n\nSay “save script” (or “save script to <video>”) to attach it to the pipeline.'; } });
+      return null;
+    }
+    return undefined;
+  }
+  function parseIdeas(text) {
+    return String(text).split(/\n+/).map(function (l) { var mm = l.match(/^\s*\d+[.)]\s*(.+)$/); if (!mm) return null; var parts = mm[1].replace(/\*\*/g, '').split(/\s+[—–-]\s+/); return { title: parts[0].replace(/^["“]|["”]$/g, '').trim(), topic: (parts[1] || '').trim() }; }).filter(Boolean).slice(0, 10);
+  }
+  function offlineIdeas(count, about) {
+    var bank = [
+      ['How Credit Scores Really Work (And How to Raise Yours)', 'Credit & personal finance'], ['The 50/30/20 Budget for Real Life', 'Saving & budgeting'],
+      ['5 Side Hustles You Can Start This Weekend With Under $100', 'Entrepreneurship'], ['Renting vs Buying: The Math Nobody Shows You', 'Financial literacy'],
+      ['Why Your Paycheck Disappears (And How to Stop It)', 'Financial literacy'], ['Building an Emergency Fund on a Small Income', 'Saving & budgeting'],
+      ['Credit Card Traps That Keep Young Adults in Debt', 'Credit & personal finance'], ['How to Register Your First LLC Step by Step', 'Entrepreneurship'],
+      ['Index Funds Explained Like You’re Busy', 'Building wealth'], ['Buy Now, Pay Later: Smart or Trap?', 'Financial literacy'],
+      ['How to Negotiate a Raise (Scripts That Work)', 'Building wealth'], ['Business Credit vs Personal Credit', 'Entrepreneurship']
+    ];
+    var existing = (getDb().videos || []).map(function (x) { return x.title.toLowerCase(); });
+    var a = (about || '').toLowerCase();
+    var pick = bank.filter(function (b) { return existing.indexOf(b[0].toLowerCase()) === -1 && (!a || (b[0] + ' ' + b[1]).toLowerCase().indexOf(a.split(' ')[0]) !== -1); });
+    if (pick.length < count) pick = pick.concat(bank.filter(function (b) { return pick.indexOf(b) === -1 && existing.indexOf(b[0].toLowerCase()) === -1; }));
+    pick = pick.slice(0, count);
+    lastIdeas = pick.map(function (b) { return { title: b[0], topic: b[1] }; });
+    return 'AI brain is off, so here are ' + pick.length + ' starter ideas from my built-in list (tap ⚙ to add a key for fresh, trend-aware ideas):\n' + pick.map(function (b, i) { return (i + 1) + '. ' + b[0] + ' — ' + b[1]; }).join('\n') + '\n\nSay “save idea 2” or “save all ideas”.';
+  }
+  function offlineScriptOutline(topic, isShort) {
+    return 'AI brain is off, so here is the Street Wise Money outline for “' + topic + '” to fill in (tap ⚙ and add an OpenAI or xAI key and I’ll write the full script):\n' +
+      '1. HOOK (0:00–0:15): a relatable money moment about ' + topic + '.\n2. PROBLEM: why this keeps people stuck.\n3. EXPLANATION: how it actually works, in plain words.\n4. EXAMPLE: a realistic story with real numbers.\n5. ACTION PLAN: 3 steps the viewer can do this week.\n6. RECAP + CTA: one-line summary, “subscribe to Street Wise Money”.\n' +
+      (isShort ? 'Shorts: keep it to Hook → one tip → CTA, under 60 seconds.' : 'Long-form target: 6–12 minutes. Cut 3–5 Shorts from the Example and Action plan.') + '\nEducational, not financial advice.';
+  }
+
   // ---------- command router ----------
   function localCommand(raw) {
     var t = raw.trim(), q = t.toLowerCase().replace(/[.!?]+$/, '').replace(/^(hey |ok |okay )?jarvis[, ]*/, '').trim();
@@ -419,7 +630,12 @@
     if (!q) return 'Yes? Say “help” for options.';
     if (/^(help|commands|what can you do|\?)/.test(q)) return helpText();
     if (/^(hi|hello|hey|good (morning|afternoon|evening))\b/.test(q) && q.split(' ').length <= 3) return 'Good ' + partOfDay() + '. Ready when you are — say “briefing” for a status report.';
-    if (/^(thanks|thank you)/.test(q)) return 'At your service.';
+    if (/^(thanks|thank you)/.test(q)) return settings.persona === 'streetwise' ? 'Anytime. Stay street wise.' : 'At your service.';
+    if (/^(street ?wise|money|green)\s+(mode|personality|persona)( on)?$|^(switch to|go|be)\s+street ?wise$/.test(q)) { setPersona('streetwise'); return 'Street Wise mode on. Let’s get this money right — practical moves, no fluff.'; }
+    if (/^(classic|normal|default|blue)\s+(mode|personality|persona)( on)?$|^(switch to|go|be)\s+classic$/.test(q)) { setPersona('classic'); return 'Classic mode restored. At your service.'; }
+    if (/^(switch|change|toggle)\s+(personality|persona|mode)$/.test(q)) { setPersona(settings.persona === 'streetwise' ? 'classic' : 'streetwise'); return settings.persona === 'streetwise' ? 'Street Wise mode on.' : 'Classic mode on.'; }
+    if (/^(full ?screen|expand|hud mode|maximi[sz]e)$/.test(q)) { setFull(true); return 'Full-screen HUD engaged. Press Esc to exit.'; }
+    if (/^(exit full ?screen|minimi[sz]e|compact|small mode|shrink)$/.test(q)) { setFull(false); return 'Back to compact mode.'; }
     if (/^(briefing|status|summary|summarize|sitrep|report|overview|dashboard summary)$/.test(q) || /^(give me|what'?s) (a |the |my )?(briefing|status|summary)/.test(q)) { goTo('overview'); return summaryText(); }
     if (/^(kpis?|metrics|numbers|scoreboard)$/.test(q) && v) { var k = v.kpis(); goTo('overview'); return 'KPIs: active pipeline ' + money(k.pipeline) + '/mo · weighted ' + money(k.weighted) + ' · won ' + money(k.wonRevenue) + '/mo (' + k.targetPct + '% of cleaning target) · win rate ' + (k.winRate == null ? '—' : k.winRate + '%') + ' · ' + k.openTasks + ' open tasks · paper equity ' + money(k.balance + k.openPnl) + '.'; }
     if (/^(deadlines?|what'?s due|due soon|upcoming)/.test(q) && v) { var dl = v.deadlines(21); goTo('overview'); return dl.length ? 'Due in the next 21 days:\n' + dl.map(function (x, i) { return (i + 1) + '. ' + x.name + ' — ' + x.type + ', ' + x.who + ', ' + x.due + ' (' + (x.d < 0 ? Math.abs(x.d) + ' days overdue' : x.d === 0 ? 'today' : 'in ' + x.d + ' days') + ')'; }).join('\n') : 'Nothing is due in the next 21 days.'; }
@@ -431,6 +647,8 @@
     if (/^(what time|time|date|what'?s the date|today)$/.test(q)) return 'It is ' + new Date().toLocaleString(undefined, { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + '.';
     if (/^export/.test(q)) { var ex = document.getElementById('export'); if (ex) { ex.click(); return 'Exporting the dashboard data as JSON.'; } }
 
+    var yc = ytCommand(q, t);
+    if (yc !== undefined) return yc;
     var tr = tradingCommand(q);
     if (tr !== undefined) return tr;
 
@@ -492,8 +710,10 @@
       if (key === 'settings') return localCommand('settings');
       if (SECTIONS[key] && goTo(key)) return 'Showing ' + sectionLabel(key) + '.';
     }
-    if (/^(agents|list agents|who are the agents|team)$/.test(q)) { goTo('agents'); return 'Agents: Contract Scout, Partner Scout, Financial, Compliance, Operations and Trading. Their dashboard connections are pending — they are not running yet, so tasks you assign are tracked on the board. Ask “who is compliance” for details.'; }
+    if (/^(youtube|channel|street wise money|swm|yt)\s+(agents|team|crew)$|^(youtube|channel) agents$/.test(q) && v && v.YT_AGENTS) { goTo('swm'); return 'Street Wise Money agents:\n' + v.YT_AGENTS.map(function (a) { return '• ' + a[0] + ' — ' + a[2]; }).join('\n') + '\nAssign one with “assign Scriptwriter to …”. They are role cards that track tasks — not connected automations.'; }
+    if (/^(agents|list agents|who are the agents|team)$/.test(q)) { goTo('agents'); return 'Agents: Contract Scout, Partner Scout, Financial, Compliance, Operations and Trading, plus the Street Wise Money crew (say “youtube agents”). Their dashboard connections are pending — they are not running yet, so tasks you assign are tracked on the board. Ask “who is compliance” for details.'; }
     if ((m = q.match(/^(?:who is|what is|what does|tell me about)\s+(?:the\s+)?(.+?)(?:\s+agent)?(?:\s+do)?$/))) {
+      if (v && v.YT_AGENTS) { var ya = v.YT_AGENTS.find(function (a) { var n = a[0].toLowerCase(); return m[1].indexOf(n) !== -1 || n.indexOf(m[1]) === 0 || (m[1].length > 4 && n.indexOf(m[1]) !== -1); }); if (ya) return ya[0] + ' (Street Wise Money): ' + ya[2] + '. Stage: ' + ya[3] + '.'; }
       var ak = Object.keys(AGENT_INFO).find(function (a) { return m[1].indexOf(a) !== -1 || a.indexOf(m[1]) === 0; });
       if (ak) return AGENT_INFO[ak];
       if (/jarvis|you/.test(m[1])) return 'I am Jarvis, the assistant built into Vanguard God\'s-Eye. I work while this page is open. ' + (aiReady() ? 'My AI brain is connected.' : 'Add an API key in ⚙ for an AI brain.');
@@ -518,15 +738,16 @@
     return 'You are JARVIS, the AI assistant inside "Vanguard God\'s-Eye", an AI command center for Vanguard, a small business with a Cleaning Division (recurring janitorial contracts, subcontractor-first, target $15,000+/month, Escambia, Santa Rosa, Okaloosa and Walton counties, Florida) and a Courier Division (recurring delivery contracts). ' +
       'The dashboard has contracts management (stages Lead → Qualifying → Bid prep → Submitted → Won/Lost), an agent task board with a CEO approval queue, and an EUR/USD paper-trading simulator (random-walk simulated prices, paper money, no broker). Agents (Contract Scout, Partner Scout, Financial, Compliance, Operations, Trading) are planned but not connected. ' +
       'Workflow is approval-first: never claim you submitted bids, contacted anyone, or placed trades — you cannot. You only run while the user has the page open. Do not give personalised financial advice; frame trading discussion as education/risk management. ' +
-      'Be concise, confident and practical, with a light butler-like tone. Replies are often spoken aloud, so prefer short paragraphs and plain text (no markdown tables). ' +
+      (settings.persona === 'streetwise' ? 'PERSONALITY: Street Wise — talk like the Street Wise Money host: confident, smooth, urban, practical and relatable, short punchy sentences, no fake wealth promises. ' : 'PERSONALITY: Classic — a calm, polished, light butler-like tone. ') + 'Be concise, confident and practical. Replies are often spoken aloud, so prefer short paragraphs and plain text (no markdown tables). ' +
       'The user can also use offline commands like "add cleaning opportunity <name> $<monthly> due in 14 days", "move <name> to submitted", "assign <agent> to <task>", "buy 0.1 lots stop 20 target 40", "briefing"; suggest these when they would help. ' +
-      'Current dashboard data (JSON): ' + JSON.stringify({ kpis: v ? v.kpis() : null, deadlines: v ? v.deadlines(30) : null, simPrice: v ? v.sim.price() : null, opportunities: d.opps, tasks: d.tasks, paperTrades: d.trades, now: new Date().toString() }).slice(0, 14000);
+      (v && v.CHANNEL_BIBLE ? 'Vanguard also runs STREET WISE MONEY (' + v.CHANNEL_BIBLE.handle + '), a faceless YouTube channel with an avatar host. Channel bible: ' + JSON.stringify(v.CHANNEL_BIBLE) + '. Its agents: ' + v.YT_AGENTS.map(function (a) { return a[0] + ' (' + a[2] + ')'; }).join('; ') + '. Pipeline stages: ' + v.VIDEO_STAGES.join(' → ') + '. Never say a video was uploaded; uploads need the owner\'s approval and are done by the owner in YouTube Studio. Channel stats are entered manually by the owner; never invent live statistics. ' : '') +
+      'Current dashboard data (JSON): ' + JSON.stringify({ streetWiseMoney: v && v.ytStatus ? { status: v.ytStatus(), videos: (d.videos || []).map(function (x) { return { title: x.title, topic: x.topic, stage: x.stage, approved: !!x.approved, publish: x.publish }; }) } : null, kpis: v ? v.kpis() : null, deadlines: v ? v.deadlines(30) : null, simPrice: v ? v.sim.price() : null, opportunities: d.opps, tasks: d.tasks, paperTrades: d.trades, now: new Date().toString() }).slice(0, 14000);
   }
-  async function callAi(messages) {
+  async function callAi(messages, maxTokens) {
     var res = await fetch(effectiveBase() + '/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + settings.apiKey },
-      body: JSON.stringify({ model: effectiveModel(), messages: messages, temperature: 0.4, max_tokens: 600 })
+      body: JSON.stringify({ model: effectiveModel(), messages: messages, temperature: 0.6, max_tokens: maxTokens || 600 })
     });
     var body = await res.text(), json = null;
     try { json = JSON.parse(body); } catch (e) {}
@@ -535,15 +756,19 @@
     if (!c) throw new Error('The API returned no answer.');
     return String(c).trim();
   }
-  async function askAi(text) {
+  async function askAi(text, opts) {
+    opts = opts || {};
     var thinking = addMsg('sys', 'Jarvis is thinking…');
+    setState('thinking');
     try {
       var msgs = [{ role: 'system', content: systemPrompt() }].concat(history.slice(-12, -1)).concat([{ role: 'user', content: text }]);
-      var reply = await callAi(msgs);
-      thinking.remove();
-      say(reply, { ai: true });
+      var reply = await callAi(msgs, opts.maxTokens);
+      thinking.remove(); if (hudState === 'thinking') setState('idle');
+      if (opts.onReply) reply = opts.onReply(reply);
+      if (opts.speakText) { addMsg('bot', reply, { ai: true }); speak(opts.speakText); }
+      else say(reply, { ai: true });
     } catch (e) {
-      thinking.remove();
+      thinking.remove(); if (hudState === 'thinking') setState('idle');
       var msg = String(e && e.message || e);
       if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) msg += ' — the browser could not reach ' + effectiveBase() + '. Check the base URL and your connection (some providers block requests made directly from a web page).';
       say('I could not reach the AI brain: ' + msg + '\nBuilt-in commands still work — say “help”.');
@@ -570,7 +795,7 @@
     say('I don\'t have a built-in command for that yet. Say “help” for what I can do offline, or tap ⚙ to connect an AI brain (your own OpenAI or xAI key) for open-ended questions.');
   }
 
-  window.Jarvis = { ask: handle, open: open, toggle: toggle, command: localCommand, settings: function () { return { provider: settings.provider, model: effectiveModel(), baseUrl: effectiveBase(), aiReady: aiReady(), speak: settings.speak }; } };
+  window.Jarvis = { ask: handle, open: open, toggle: toggle, command: localCommand, hud: { state: function (s) { setState(s); }, persona: function (p) { setPersona(p); }, full: function (f) { setFull(f); } }, settings: function () { return { provider: settings.provider, model: effectiveModel(), baseUrl: effectiveBase(), aiReady: aiReady(), speak: settings.speak }; } };
   if (window.speechSynthesis && speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = function () {};
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildUi); else buildUi();
 })();
