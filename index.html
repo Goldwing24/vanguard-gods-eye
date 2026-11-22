@@ -20,6 +20,7 @@
   <a href="#overview">📊 Overview</a>
   <a href="#contracts">📁 Contracts</a>
   <a href="#trading">📈 Trading Sim</a>
+  <a href="#swm">🎬 Street Wise Money</a>
   <a href="#agents">🧠 Agents &amp; Tasks</a>
   <a href="#approvals-sec">🔔 Approvals</a>
   <a href="#activity-sec">📡 Activity</a>
@@ -54,6 +55,7 @@
       <div class="row"><span>Route analysis</span><span>Planned</span></div>
       <div class="row"><span>Scout connection</span><span class="warn">Not connected</span></div></div>
   </div>
+  <section class="card" style="margin-top:16px"><h3>🎬 Street Wise Money · YouTube</h3><div id="o-yt"></div></section>
   <div hidden><b id="opcount">0</b><b id="tradecount">0</b></div>
 </section>
 
@@ -113,6 +115,38 @@
   </section>
 </div>
 <section class="card" style="margin-top:16px"><h3>📒 Positions &amp; journal</h3><div class="scroll"><div id="trades"></div></div></section>
+
+<!-- ================= STREET WISE MONEY ================= -->
+<div class="sec-title" id="swm"><h2><span>▍</span>STREET WISE MONEY — FACELESS YOUTUBE CHANNEL</h2><span class="chip" id="yt-summary"></span></div>
+<div class="kpis yt-kpis">
+  <div class="kpi"><span>Subscribers</span><b id="yt-subs">—</b></div>
+  <div class="kpi"><span>Total views</span><b id="yt-views">—</b></div>
+  <div class="kpi"><span>Videos published</span><b id="yt-published">—</b></div>
+  <div class="kpi"><span>Revenue (28 days)</span><b id="yt-revenue">—</b></div>
+</div>
+<div class="note" id="yt-updated"></div>
+<form class="form" id="ytform" style="margin-bottom:14px">
+  <input id="yt-in-subs" type="number" min="0" placeholder="Subscribers">
+  <input id="yt-in-views" type="number" min="0" placeholder="Total views">
+  <input id="yt-in-published" type="number" min="0" placeholder="Videos published">
+  <input id="yt-in-revenue" type="number" min="0" step="0.01" placeholder="Revenue $ (28 days)">
+  <button>Update channel stats</button>
+</form>
+<section class="card">
+  <h3>🎞 Content pipeline</h3>
+  <form class="form" id="videoform">
+    <input id="videotitle" placeholder="Video title" required>
+    <input id="videotopic" placeholder="Topic / pillar">
+    <select id="videostage" aria-label="Stage"></select>
+    <input id="videodate" type="date" title="Target publish date">
+    <button>Add video</button>
+  </form>
+  <div class="kanban" id="yt-board"></div>
+</section>
+<div class="split" style="margin-top:16px">
+  <section class="card"><h3>📖 Channel bible</h3><div id="yt-bible"></div></section>
+  <section class="card"><h3>🤖 Street Wise Money agents</h3><p class="muted" style="margin-top:0">Your channel crew. Assign them tasks here or through Jarvis; tasks go on the Agent Assignment Board. They are role cards, not connected automations.</p><div class="yt-agents" id="yt-agent-cards"></div></section>
+</div>
 
 <!-- ================= AGENTS & TASKS ================= -->
 <div class="sec-title" id="agents"><h2><span>▍</span>AGENTS &amp; ASSIGNMENTS</h2><span class="chip">Agent integrations pending — tasks are tracked here</span></div>

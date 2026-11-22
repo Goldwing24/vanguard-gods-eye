@@ -19,6 +19,31 @@ const AGENTS = [
   ['Operations', '⚙', 'Assignments and deadlines', 'Dashboard connection pending'],
   ['Trading', '📈', 'EUR/USD paper trading only', 'Broker connection disabled']
 ];
+/* Street Wise Money — faceless YouTube channel division */
+const VIDEO_STAGES = ['Idea', 'Script', 'Voiceover', 'Edit', 'Thumbnail', 'Approval', 'Scheduled', 'Published'];
+const GATED_STAGES = ['Scheduled', 'Published']; // standing rule: nothing goes to YouTube without the owner's approval
+const CHANNEL_BIBLE = {
+  handle: '@streetwisemoney',
+  mission: 'Practical money and business lessons for young adults, with relatable examples people can actually use to improve their financial lives, build wealth and create opportunities.',
+  audience: 'Young adults (about 18–35): people improving their credit, new entrepreneurs, people learning to save, invest and build wealth, and anyone who wants financial independence but doesn’t know where to start.',
+  tone: 'Confident, smooth, urban and practical. Relatable real-world examples. No fake wealth promises, no robotic lectures, no corporate-announcer voice. A practical takeaway in every upload.',
+  avatar: 'Faceless channel with an avatar host: a photo-based digital host (HeyGen) speaking in the creator’s own cloned voice (ElevenLabs), keeping his natural accent and personality.',
+  pillars: ['Credit & personal finance', 'Entrepreneurship — starting and growing businesses', 'Financial literacy & real-world money mistakes', 'Saving & budgeting', 'Building wealth, investing & extra income streams'],
+  formula: 'Hook → Problem → Explanation → Example → Action plan → Recap',
+  cadence: '2 long videos per week (Tuesday & Friday, 6–12 min) + 3–5 Shorts cut from them (goal: 5/week).',
+  tools: [['ChatGPT', 'ideas & scripts'], ['ElevenLabs', 'voice'], ['HeyGen', 'avatar'], ['CapCut', 'editing'], ['Canva', 'thumbnails'], ['Zapier', 'orchestration'], ['YouTube Studio', 'uploads']],
+  rule: 'Nothing is uploaded or published to YouTube without the owner’s approval.'
+};
+const YT_AGENTS = [
+  ['Trend Researcher', '🔭', 'Finds trending money topics, search demand and competitor gaps across the five pillars; turns them into video ideas', 'Feeds the Idea column · ChatGPT'],
+  ['Scriptwriter', '✍️', '6–12 min scripts in the channel formula (Hook → Problem → Explanation → Example → Action plan → Recap), plus Shorts cut-downs', 'Idea → Script · ChatGPT'],
+  ['Voiceover Producer', '🎙', 'Generates narration in the host’s cloned voice, checks pacing and pronunciation, renders the avatar', 'Script → Voiceover · ElevenLabs + HeyGen'],
+  ['Video Editor', '🎬', 'Assembles avatar footage, B-roll, captions, music and graphics; cuts 3–5 Shorts per long video', 'Voiceover → Edit · CapCut'],
+  ['Thumbnail & Title Designer', '🖼', 'Designs thumbnails and tests title options that match the channel look', 'Edit → Thumbnail · Canva'],
+  ['Upload/SEO Manager', '📤', 'Prepares title, description, hashtags and chapters; schedules Tue/Fri releases — only after owner approval', 'Approval → Scheduled → Published · YouTube Studio'],
+  ['Analytics', '📊', 'Reviews the subscribers, views and revenue you enter; recommends what to make next', 'Channel KPIs (entered manually)']
+];
+const ALL_OWNERS = ['Executive'].concat(AGENTS.map(a => a[0]), YT_AGENTS.map(a => a[0]));
 
 let db;
 try { db = JSON.parse(localStorage.getItem(KEY)) || {}; } catch { db = {}; }
@@ -37,6 +62,15 @@ function normalize() {
   db.tasks = Array.isArray(db.tasks) ? db.tasks : [];
   db.trades = Array.isArray(db.trades) ? db.trades : [];
   db.log = Array.isArray(db.log) ? db.log : [];
+  db.videos = Array.isArray(db.videos) ? db.videos : [];
+  db.yt = db.yt && typeof db.yt === 'object' ? db.yt : {};
+  if (!db.swmSeeded) {
+    db.swmSeeded = true;
+    if (!db.videos.length) db.videos.push(
+      { id: 'swm001', title: 'Your First $1,000: The Money Move That Can Change Your Life', topic: 'Saving · Episode 001 · 2:11 · 1080p', stage: 'Approval', approved: true, publish: '', created: Date.now(), notes: 'Approved for upload. Next step: upload & publish on YouTube.' },
+      { id: 'swm002', title: '5 Money Mistakes Keeping You Broke', topic: 'Financial literacy · Episode 002', stage: 'Script', approved: false, publish: '', created: Date.now() + 1, notes: 'Script drafted.' });
+  }
+  db.videos.forEach(v => { if (!VIDEO_STAGES.includes(v.stage)) v.stage = 'Idea'; if (!v.created) v.created = Date.now(); if (GATED_STAGES.includes(v.stage)) v.approved = true; });
   db.opps.forEach(o => { if (!STAGES.includes(o.stage)) o.stage = 'Lead'; if (!o.created) o.created = Date.now(); });
   db.tasks.forEach(t => { if (!t.status) t.status = 'Open'; });
   db.trades.forEach(t => { if (!t.status) t.status = 'Open'; if (!t.lots) t.lots = 0.1; });
@@ -75,6 +109,7 @@ function kpis() {
 function deadlines(days = 21) {
   return db.opps.filter(o => o.due && o.stage !== 'Won' && o.stage !== 'Lost').map(o => ({ type: 'Contract', name: o.name, due: o.due, d: daysUntil(o.due), who: o.division }))
     .concat(db.tasks.filter(t => t.due && t.status !== 'Done').map(t => ({ type: 'Task', name: t.name, due: t.due, d: daysUntil(t.due), who: t.owner })))
+    .concat(db.videos.filter(v => v.publish && v.stage !== 'Published').map(v => ({ type: 'Video', name: v.title, due: v.publish, d: daysUntil(v.publish), who: 'Street Wise Money · ' + v.stage })))
     .filter(x => x.d <= days).sort((a, b) => a.d - b.d);
 }
 function tradePnl(t, price) {
@@ -148,6 +183,40 @@ function closeTrade(tradeId, price, reason, silent) {
   if (!silent) save(); return t;
 }
 
+/* ---------------- Street Wise Money ---------------- */
+function addVideo(v) {
+  const vid = { id: id(), title: String(v.title || '').trim(), topic: String(v.topic || '').trim(), stage: VIDEO_STAGES.includes(v.stage) ? v.stage : 'Idea', publish: v.publish || '', created: Date.now(), script: v.script || '' };
+  if (!vid.title) return null;
+  db.videos.push(vid); logEvent('Street Wise Money: new video “' + vid.title + '” (' + vid.stage + ')'); save(); return vid;
+}
+function setVideoStage(videoId, stage) {
+  const v = db.videos.find(x => x.id === videoId); if (!v || !VIDEO_STAGES.includes(stage)) return null;
+  if (GATED_STAGES.includes(stage) && !v.approved) {
+    v.stage = 'Approval'; logEvent('Street Wise Money: “' + v.title + '” is waiting for your approval before ' + stage); save();
+    return Object.assign({ blocked: true }, v);
+  }
+  v.stage = stage; if (stage === 'Published' && !v.publishedAt) v.publishedAt = new Date().toISOString().slice(0, 10);
+  logEvent('Street Wise Money: “' + v.title + '” → ' + stage); save(); return v;
+}
+function approveVideo(videoId, ok = true) {
+  const v = db.videos.find(x => x.id === videoId); if (!v) return null;
+  v.approved = !!ok; if (!ok && GATED_STAGES.includes(v.stage)) v.stage = 'Approval';
+  logEvent('Street Wise Money: “' + v.title + '” ' + (ok ? 'approved for upload' : 'approval withdrawn')); save(); return v;
+}
+function setVideoScript(videoId, script) { const v = db.videos.find(x => x.id === videoId); if (!v) return null; v.script = String(script); logEvent('Script saved to “' + v.title + '”'); save(); return v; }
+const YT_FIELDS = { subscribers: 'Subscribers', views: 'Total views', published: 'Videos published', revenue: 'Revenue (last 28 days)' };
+function updateYt(fields) {
+  Object.keys(fields).forEach(k => { if (k in YT_FIELDS && fields[k] !== '' && fields[k] != null && isFinite(+fields[k])) db.yt[k] = +fields[k]; });
+  db.yt.updated = new Date().toISOString(); logEvent('Street Wise Money stats updated'); save(); return db.yt;
+}
+function ytStatus() {
+  const by = VIDEO_STAGES.reduce((m, s) => (m[s] = db.videos.filter(v => v.stage === s).length, m), {});
+  const upcoming = db.videos.filter(v => v.publish && v.stage !== 'Published').sort((a, b) => a.publish.localeCompare(b.publish));
+  return { stats: Object.assign({}, db.yt), byStage: by, inProduction: db.videos.filter(v => v.stage !== 'Published').length, total: db.videos.length,
+    next: upcoming[0] || null, awaiting: db.videos.filter(v => v.stage === 'Approval' && !v.approved), readyToUpload: db.videos.filter(v => v.approved && !['Scheduled', 'Published'].includes(v.stage)), ytTasks: db.tasks.filter(t => t.status !== 'Done' && YT_AGENTS.some(a => a[0] === t.owner)).length };
+}
+const fmtNum = n => n == null || n === '' ? '—' : Number(n).toLocaleString();
+
 /* ---------------- rendering ---------------- */
 function render() {
   const k = kpis();
@@ -167,7 +236,7 @@ function render() {
   $('funnel').innerHTML = STAGES.map(s => { const a = db.opps.filter(o => o.stage === s); const v = a.reduce((t, o) => t + oppValue(o), 0);
     return `<div class="row"><span style="width:90px">${s}</span><div class="bar"><i style="width:${a.length / maxStage * 100}%"></i></div><span class="muted" style="width:120px;text-align:right">${a.length} · ${money(v)}</span></div>`; }).join('');
 
-  renderOpps(); renderTasks(); renderAgents(); renderTrades(); renderTradingNumbers(); renderMarket();
+  renderOpps(); renderTasks(); renderAgents(); renderSwm(); renderTrades(); renderTradingNumbers(); renderMarket();
   $('log').innerHTML = db.log.length ? db.log.slice(0, 12).map(e => `<div class="row"><span>${esc(e.msg)}</span><small class="muted">${new Date(e.at).toLocaleString()}</small></div>`).join('') : '<div class="empty">Nothing logged yet.</div>';
 }
 function renderOpps() {
@@ -187,11 +256,47 @@ function renderOpps() {
 function renderTasks() {
   $('tasks').innerHTML = db.tasks.length ? db.tasks.map(x => { const d = daysUntil(x.due);
     return `<div class="row"><div><b>${esc(x.name)}</b><div class="muted">${esc(x.owner)} • ${esc(x.status)}${x.due ? ` • <span class="${x.status !== 'Done' && d < 0 ? 'bad' : ''}">due ${esc(x.due)}</span>` : ''}</div></div><select aria-label="Status" onchange="setStatus('${x.id}',this.value)"><option ${x.status === 'Open' ? 'selected' : ''}>Open</option><option ${x.status === 'Needs approval' ? 'selected' : ''}>Needs approval</option><option ${x.status === 'Done' ? 'selected' : ''}>Done</option></select><button onclick="remove('tasks','${x.id}')">×</button></div>`; }).join('') : '<div class="empty">No assignments entered yet.</div>';
-  $('approvals').innerHTML = db.tasks.filter(x => x.status === 'Needs approval').map(x => `<div class="row"><span>${esc(x.name)} <span class="muted">(${esc(x.owner)})</span></span><span><button onclick="setStatus('${x.id}','Done')">Mark reviewed</button> <button onclick="setStatus('${x.id}','Open')">Send back</button></span></div>`).join('') || '<div class="empty">No approval items.</div>';
+  const vidAppr = db.videos.filter(v => v.stage === 'Approval' && !v.approved).map(v => `<div class="row"><span>🎬 Street Wise Money: ${esc(v.title)} <span class="muted">(upload approval)</span></span><span><button onclick="approveVideo('${v.id}')">Approve upload</button></span></div>`).join('');
+  $('approvals').innerHTML = vidAppr + db.tasks.filter(x => x.status === 'Needs approval').map(x => `<div class="row"><span>${esc(x.name)} <span class="muted">(${esc(x.owner)})</span></span><span><button onclick="setStatus('${x.id}','Done')">Mark reviewed</button> <button onclick="setStatus('${x.id}','Open')">Send back</button></span></div>`).join('') || '<div class="empty">No approval items.</div>';
+}
+function agentCards(list, suffixAgent) {
+  return list.map(([name, icon, desc, tag]) => { const n = db.tasks.filter(t => t.owner === name && t.status !== 'Done').length;
+    return `<div class="card agent"><strong>${icon} ${esc(name)}${suffixAgent && ['Financial', 'Compliance', 'Operations', 'Trading'].includes(name) ? ' Agent' : ''}</strong><small>${esc(desc)}</small><p class="tag">${esc(tag)}</p><div class="count">${n} open task${n === 1 ? '' : 's'}</div><button type="button" onclick="assignTo('${esc(name)}')">+ Assign</button></div>`; }).join('');
 }
 function renderAgents() {
-  $('agent-cards').innerHTML = AGENTS.map(([name, icon, desc, tag]) => { const n = db.tasks.filter(t => t.owner === name && t.status !== 'Done').length;
-    return `<div class="card agent"><strong>${icon} ${name}${name === 'Financial' || name === 'Compliance' || name === 'Operations' || name === 'Trading' ? ' Agent' : ''}</strong><small>${desc}</small><p class="tag">${tag}</p><div class="count">${n} open task${n === 1 ? '' : 's'}</div><button type="button" onclick="assignTo('${name}')">+ Assign</button></div>`; }).join('');
+  $('agent-cards').innerHTML = agentCards(AGENTS, true);
+  $('yt-agent-cards').innerHTML = agentCards(YT_AGENTS, false);
+}
+function renderBible() {
+  const b = CHANNEL_BIBLE;
+  $('yt-bible').innerHTML = `<div class="row"><span>Channel</span><strong>Street Wise Money · ${esc(b.handle)}</strong></div>` +
+    [['Mission', b.mission], ['Audience', b.audience], ['Tone', b.tone], ['Avatar & voice', b.avatar], ['Video formula', b.formula], ['Cadence', b.cadence]]
+      .map(([k, v]) => `<div class="row" style="align-items:flex-start"><span style="min-width:110px">${k}</span><span style="text-align:right">${esc(v)}</span></div>`).join('') +
+    `<div class="row" style="align-items:flex-start"><span style="min-width:110px">Pillars</span><span style="text-align:right">${b.pillars.map(p => `<span class="chip">${esc(p)}</span>`).join(' ')}</span></div>` +
+    `<div class="row" style="align-items:flex-start"><span style="min-width:110px">Tool stack</span><span style="text-align:right">${b.tools.map(t => `<span class="chip">${esc(t[0])} · ${esc(t[1])}</span>`).join(' ')}</span></div>` +
+    `<div class="note" style="margin-top:10px">🔒 Standing rule: ${esc(b.rule)} Videos stop at <b>Approval</b> until you approve them.</div>`;
+}
+function renderSwm() {
+  const y = db.yt, st = ytStatus();
+  renderBible();
+  $('yt-subs').textContent = fmtNum(y.subscribers); $('yt-views').textContent = fmtNum(y.views);
+  $('yt-published').textContent = fmtNum(y.published); $('yt-revenue').textContent = y.revenue == null ? '—' : '$' + Number(y.revenue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  $('yt-updated').textContent = y.updated ? 'Entered by you · last updated ' + new Date(y.updated).toLocaleString() : 'Not entered yet — type your numbers from YouTube Studio below. No live YouTube connection.';
+  $('yt-summary').textContent = st.inProduction + ' in production · ' + st.byStage.Published + ' published';
+  $('o-yt').innerHTML = `<div class="row"><span>Pipeline</span><strong>${st.inProduction} in production · ${st.byStage.Published} published</strong></div>` +
+    `<div class="row"><span>Next release</span><strong>${st.next ? esc(st.next.title) + ' · ' + esc(st.next.publish) : '—'}</strong></div>` +
+    `<div class="row"><span>Subscribers (entered)</span><strong>${fmtNum(y.subscribers)}</strong></div>` +
+    `<div class="row"><span>Open channel tasks</span><strong>${st.ytTasks}</strong></div>`;
+  $('yt-board').innerHTML = VIDEO_STAGES.map((stage, i) => {
+    const vids = db.videos.filter(v => v.stage === stage).sort((a, b) => (a.publish || '9999').localeCompare(b.publish || '9999'));
+    return `<div class="kcol"><div class="khead">${stage} <span class="chip">${vids.length}</span></div>` + (vids.map(v => { const d = daysUntil(v.publish);
+      return `<div class="kcard"><b>${esc(v.title)}</b>${v.topic ? `<div class="muted">${esc(v.topic)}</div>` : ''}` +
+        `${v.publish ? `<div class="${stage !== 'Published' && d < 0 ? 'bad' : stage !== 'Published' && d <= 3 ? 'warn' : 'muted'}">📅 ${esc(v.publish)}</div>` : ''}${v.notes ? `<div class="muted">${esc(v.notes)}</div>` : ''}${v.script ? '<div class="good">📝 script saved</div>' : ''}` +
+        `${stage === 'Approval' ? (v.approved ? '<div class="good">✅ Approved — ready to upload</div>' : `<div class="warn">⏳ Needs your approval</div><button onclick="approveVideo('${v.id}')">Approve upload</button>`) : ''}` +
+        `<div class="kact"><select aria-label="Stage" onchange="setVideoStage('${v.id}',this.value)">${VIDEO_STAGES.map(s2 => `<option ${s2 === stage ? 'selected' : ''}>${s2}</option>`).join('')}</select>` +
+        `${i < VIDEO_STAGES.length - 1 ? `<button title="Next stage" onclick="setVideoStage('${v.id}','${VIDEO_STAGES[i + 1]}')">→</button>` : ''}` +
+        `${v.script ? `<button title="View script" onclick="showScript('${v.id}')">📝</button>` : ''}<button title="Remove" onclick="remove('videos','${v.id}')">×</button></div></div>`; }).join('') || '<div class="empty" style="padding:6px 0">—</div>') + '</div>';
+  }).join('');
 }
 function renderTrades() {
   if (!db.trades.length) { $('trades').innerHTML = '<div class="empty">No paper trades yet. Start the simulated market and open one above.</div>'; return; }
@@ -234,7 +339,12 @@ function line(pts, color) {
 /* ---------------- wiring ---------------- */
 window.remove = (k, i) => { db[k] = db[k].filter(x => x.id !== i); save(); };
 window.setStatus = (i, v) => { const t = db.tasks.find(x => x.id === i); if (t) { t.status = v; logEvent('“' + t.name + '” → ' + v); save(); } };
-window.setStage = setStage; window.closeTrade = closeTrade;
+window.setStage = setStage; window.closeTrade = closeTrade; window.setVideoStage = setVideoStage; window.approveVideo = approveVideo;
+window.showScript = vid => { const v = db.videos.find(x => x.id === vid); if (!v) return; const w = window.open('', '_blank'); if (w) { w.document.title = v.title + ' — script'; const pre = w.document.createElement('pre'); pre.style.cssText = 'white-space:pre-wrap;font:15px/1.5 system-ui;max-width:760px;margin:30px auto'; pre.textContent = v.title + '\n\n' + v.script; w.document.body.appendChild(pre); } else alert(v.script); };
+$('owner').innerHTML = '<option>Executive</option><optgroup label="Vanguard agents">' + AGENTS.map(a => `<option>${a[0]}</option>`).join('') + '</optgroup><optgroup label="Street Wise Money agents">' + YT_AGENTS.map(a => `<option>${esc(a[0])}</option>`).join('') + '</optgroup>';
+$('videostage').innerHTML = VIDEO_STAGES.map(s2 => `<option>${s2}</option>`).join('');
+$('videoform').onsubmit = e => { e.preventDefault(); addVideo({ title: $('videotitle').value, topic: $('videotopic').value, stage: $('videostage').value, publish: $('videodate').value }); e.target.reset(); };
+$('ytform').onsubmit = e => { e.preventDefault(); updateYt({ subscribers: $('yt-in-subs').value, views: $('yt-in-views').value, published: $('yt-in-published').value, revenue: $('yt-in-revenue').value }); e.target.reset(); };
 window.assignTo = name => { $('owner').value = name; $('taskname').focus(); $('taskname').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
 
 $('oppstage').innerHTML = STAGES.map(s => `<option>${s}</option>`).join('');
@@ -251,7 +361,7 @@ $('acct-reset').onclick = () => { if (confirm('Delete all paper trades and reset
 $('export').onclick = () => { const a = document.createElement('a'), blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' }); a.href = URL.createObjectURL(blob); a.download = 'vanguard-dashboard-backup.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
 $('import').onclick = () => $('importfile').click();
 $('importfile').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { const v = JSON.parse(await f.text()); if (confirm('Replace current dashboard data with ' + f.name + '?')) { db = v; normalize(); logEvent('Imported ' + f.name); save(); } } catch { alert('That file is not valid dashboard JSON.'); } e.target.value = ''; };
-$('clear').onclick = () => { if (confirm('Delete all locally saved dashboard records?')) { db = { opps: [], tasks: [], trades: [], log: [] }; save(); } };
+$('clear').onclick = () => { if (confirm('Delete all locally saved dashboard records?')) { db = { opps: [], tasks: [], trades: [], log: [], videos: [], yt: {} }; save(); } };
 
 // highlight nav item for the section in view
 const navLinks = [...document.querySelectorAll('#nav a')];
@@ -285,5 +395,5 @@ $('clock').textContent = new Date().toLocaleDateString(undefined, { year: 'numer
 render();
 
 // Public API for Jarvis and the console
-window.Vanguard = { STAGES, STAGE_PROB, kpis, deadlines, addOpp, setStage, addTask, openTrade, closeTrade, tradePnl, tradePips, positionSize,
+window.Vanguard = { STAGES, STAGE_PROB, VIDEO_STAGES, YT_AGENTS, ALL_OWNERS, addVideo, setVideoStage, setVideoScript, approveVideo, CHANNEL_BIBLE, GATED_STAGES, updateYt, ytStatus, kpis, deadlines, addOpp, setStage, addTask, openTrade, closeTrade, tradePnl, tradePips, positionSize,
   sim: { price: () => sim.price, start: simStart, stop: simStop, running: simRunning, reset: simReset, step: simStep } };
