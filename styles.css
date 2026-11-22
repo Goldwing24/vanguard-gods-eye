@@ -1,0 +1,44 @@
+/* Vanguard God's-Eye — dashboard styles (original palette preserved) */
+
+:root{font-family:Inter,system-ui,Arial,sans-serif;color:#eaf3ff;background:#06101e}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 55% 0,#15315b,#06101e 60%);min-height:100vh}.wrap{max-width:1400px;margin:auto;padding:22px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid #24466b;padding-bottom:18px;flex-wrap:wrap}.logo{font-size:26px;font-weight:900;letter-spacing:2px}.logo span{color:#43bbff}.sub,.muted{color:#a4b9d1}.pill{display:inline-block;padding:7px 11px;border-radius:30px;background:#13283f;border:1px solid #345473;font-size:12px;color:#b6d4f4}.hero{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:16px;margin:24px 0}.card{background:linear-gradient(160deg,#10223a,#0b1729);border:1px solid #24517b;border-radius:16px;padding:18px;box-shadow:0 8px 30px #0004}.card h3{margin:0 0 12px;color:#8fd9ff;font-size:15px}.core{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:1px solid #5976ff;box-shadow:0 0 30px #355fff35}.orb{height:115px;width:115px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#1b58ab,#0b1834);border:2px solid #50b7ff;box-shadow:0 0 25px #268fff8c;font-size:50px}.core h2{margin:14px 0 5px}.agents{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.agent{border-left:3px solid #35a8ff}.agent strong{display:block;margin-bottom:6px}.agent small{color:#aac0d9}.sections{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}button,select,input{font:inherit}button{cursor:pointer;border:1px solid #3682c3;background:#12395b;color:#e9f7ff;padding:9px 12px;border-radius:9px}button:hover{background:#205582}input,select{background:#091b30;color:white;border:1px solid #31577d;border-radius:8px;padding:10px;max-width:100%}.row{padding:11px 0;border-bottom:1px solid #203b59;display:flex;justify-content:space-between;gap:10px;align-items:center}.row:last-child{border-bottom:0}.tag{font-size:11px;color:#f7d994}.good{color:#58e9bc}.warn{color:#ffd37e}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.metric{padding:14px;border-radius:12px;background:#091d34;border:1px solid #21466e}.metric b{font-size:25px;display:block;margin:6px 0}.full{grid-column:1/-1}footer{color:#8198b5;font-size:12px;margin:22px 0}.empty{color:#a5bad3;padding:16px 0}.form{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.form input{flex:1;min-width:140px}.danger{border-color:#8b4956;background:#3c1e2b}.note{background:#152b42;border-left:3px solid #ffd17a;padding:10px;border-radius:6px;font-size:13px;color:#d9e4f0}@media(max-width:850px){.hero{grid-template-columns:1fr}.agents{grid-template-columns:1fr 1fr}.sections{grid-template-columns:1fr}.grid3{grid-template-columns:1fr 1fr}}@media(max-width:500px){.agents,.grid3{grid-template-columns:1fr}.wrap{padding:12px}.logo{font-size:21px}}
+
+/* ---- Command-center additions ---- */
+.nav{position:sticky;top:0;z-index:50;display:flex;gap:6px;flex-wrap:wrap;padding:10px 0;margin-top:8px;background:linear-gradient(#06101ef2,#06101ee0);backdrop-filter:blur(6px);border-bottom:1px solid #1b3a5c}
+.nav a{color:#b6d4f4;text-decoration:none;font-size:13px;padding:7px 12px;border-radius:30px;border:1px solid #2a4d72;background:#0e2036}
+.nav a:hover,.nav a.active{background:#1b4a75;color:#fff;border-color:#43bbff}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin:18px 0}
+.kpi{padding:14px;border-radius:14px;background:linear-gradient(160deg,#10223a,#0b1729);border:1px solid #24517b}
+.kpi span{font-size:12px;color:#a4b9d1;text-transform:uppercase;letter-spacing:.5px}
+.kpi b{display:block;font-size:24px;margin:6px 0 2px}
+.kpi small{color:#8fa8c4;font-size:12px}
+.progress{height:10px;border-radius:10px;background:#091b30;border:1px solid #21466e;overflow:hidden;margin:8px 0 4px}
+.progress i{display:block;height:100%;background:linear-gradient(90deg,#2b7fff,#58e9bc);width:0;transition:width .6s}
+.split{display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
+.sec-title{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:26px 0 10px}
+.sec-title h2{margin:0;font-size:18px;letter-spacing:1px}
+.sec-title h2 span{color:#43bbff}
+table.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th{text-align:left;color:#8fd9ff;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;padding:8px 6px;border-bottom:1px solid #24466b}
+.tbl td{padding:9px 6px;border-bottom:1px solid #1a3552;vertical-align:middle}
+.tbl tr:hover td{background:#0d2440}
+.tbl select{padding:5px 6px;font-size:13px}
+.tbl button{padding:5px 9px;font-size:13px}
+.scroll{overflow-x:auto}
+.stage{display:inline-block;font-size:11px;padding:3px 8px;border-radius:20px;border:1px solid #345473;background:#13283f}
+.stage.Won{color:#58e9bc;border-color:#2f8f72}.stage.Lost{color:#ff8f9c;border-color:#8b4956}.stage.Submitted{color:#ffd37e;border-color:#8a7440}
+.bad{color:#ff8f9c}
+.funnel .row{gap:12px}.funnel .bar{flex:1;height:8px;border-radius:8px;background:#091b30;overflow:hidden}.funnel .bar i{display:block;height:100%;background:#2b7fff}
+.price{font-size:34px;font-weight:900;letter-spacing:1px;font-variant-numeric:tabular-nums}
+.up{color:#58e9bc}.down{color:#ff8f9c}
+#spark,#equity{width:100%;height:90px;display:block}
+.chip{font-size:11px;padding:3px 8px;border-radius:20px;background:#13283f;border:1px solid #345473;color:#b6d4f4}
+.agent .count{font-size:12px;color:#8fd9ff;margin-top:6px}
+.agent button{margin-top:8px;padding:5px 9px;font-size:12px}
+.calc{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.calc input{width:100%}
+textarea{font:inherit;background:#091b30;color:#fff;border:1px solid #31577d;border-radius:8px;padding:10px;width:100%;min-height:60px}
+@media(max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}.split{grid-template-columns:1fr}}
+@media(max-width:600px){.kpis{grid-template-columns:1fr 1fr}.calc{grid-template-columns:1fr}.price{font-size:28px}}
+
+#overview,#contracts,#trading,#agents,#approvals-sec,#activity-sec,#taskform{scroll-margin-top:70px}
+html{scroll-behavior:smooth}

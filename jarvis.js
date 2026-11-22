@@ -23,12 +23,15 @@
     custom: { label: 'Custom (OpenAI-compatible)', baseUrl: '', model: '' }
   };
   var OWNERS = ['Executive', 'Contract Scout', 'Partner Scout', 'Financial', 'Compliance', 'Operations', 'Trading'];
+  // command word -> [element id, label]
   var SECTIONS = {
-    'cleaning': 'Cleaning Division', 'courier': 'Courier Division', 'coordinator': 'EXECUTIVE COORDINATOR',
-    'metrics': 'Command Metrics', 'trading': 'Trading Lab', 'trades': 'Trading Lab', 'pipeline': 'Opportunity Pipeline',
-    'opportunities': 'Opportunity Pipeline', 'tasks': 'Agent Assignment Board', 'assignments': 'Agent Assignment Board',
-    'board': 'Agent Assignment Board', 'approvals': 'CEO Approval Queue', 'approval': 'CEO Approval Queue',
-    'activity': 'Agent Activity', 'connection': 'Agent Activity', 'agents': 'Contract Scout'
+    'overview': ['overview', 'Overview'], 'kpis': ['overview', 'Overview'], 'home': ['overview', 'Overview'], 'dashboard': ['overview', 'Overview'],
+    'metrics': ['overview', 'Overview'], 'deadlines': ['overview', 'Overview'],
+    'contracts': ['contracts', 'Contracts Management'], 'pipeline': ['contracts', 'Contracts Management'], 'opportunities': ['contracts', 'Contracts Management'],
+    'trading': ['trading', 'Trading Lab'], 'trades': ['trading', 'Trading Lab'], 'market': ['trading', 'Trading Lab'], 'positions': ['trading', 'Trading Lab'],
+    'agents': ['agents', 'Agents & Assignments'], 'tasks': ['taskform', 'Agent Assignment Board'], 'assignments': ['taskform', 'Agent Assignment Board'], 'board': ['taskform', 'Agent Assignment Board'],
+    'approvals': ['approvals-sec', 'CEO Approval Queue'], 'approval': ['approvals-sec', 'CEO Approval Queue'],
+    'activity': ['activity-sec', 'Agent Activity'], 'connection': ['activity-sec', 'Agent Activity'], 'log': ['activity-sec', 'Agent Activity']
   };
   var AGENT_INFO = {
     'contract scout': 'Contract Scout researches opportunities and deadlines. Dashboard connection is pending.',
@@ -36,7 +39,7 @@
     'financial': 'The Financial Agent covers pricing, margin and working capital. Dashboard connection is pending.',
     'compliance': 'The Compliance Agent checks eligibility and requirements. Dashboard connection is pending.',
     'operations': 'The Operations Agent handles assignments and deadlines. Dashboard connection is pending.',
-    'trading': 'The Trading Agent is EUR/USD paper trading only. Broker connection is disabled.'
+    'trading': 'The Trading Agent is EUR/USD paper trading only. Broker connection is disabled. Try the Trading Lab simulator: “start market”, then “buy 0.1 lots stop 20 target 40”.'
   };
 
   // ---------- dashboard bridge (index.html defines db, save, render as globals) ----------
@@ -50,7 +53,7 @@
     localStorage.setItem('vanguard_phase1_v1', JSON.stringify(getDb()));
   }
   function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
-  function money(n) { return '$' + Number(n).toLocaleString(); }
+  function money(n) { n = Number(n) || 0; if (Math.abs(n) < 0.005) n = 0; return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: Math.abs(n) >= 1000 ? 0 : 2 }); }
 
   // ---------- settings ----------
   function loadSettings() {
@@ -103,7 +106,7 @@
     ['mode', 'voice', 'gear', 'close', 'settings', 'provider', 'base', 'model', 'key', 'useai', 'save', 'test', 'forget', 'log', 'chips', 'form', 'mic', 'input'].forEach(function (k) { el[k] = document.getElementById('jv-' + k); });
 
     Object.keys(PROVIDERS).forEach(function (k) { el.provider.appendChild(h('option', { value: k }, PROVIDERS[k].label)); });
-    ['Briefing', 'Show pipeline', 'Open tasks', 'Approvals', 'Paper trades', 'Help'].forEach(function (c) {
+    ['Briefing', 'Deadlines', 'Show pipeline', 'Approvals', 'Positions', 'Help'].forEach(function (c) {
       var b = h('button', { type: 'button' }, c);
       b.onclick = function () { handle(c); };
       el.chips.appendChild(b);
@@ -232,21 +235,20 @@
   function stopSpeaking() { try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {} }
 
   // ---------- dashboard helpers ----------
+  function V() { return window.Vanguard || null; }
   function findSection(name) {
-    var target = SECTIONS[name];
-    if (!target) return null;
-    var heads = document.querySelectorAll('.card h3, .card h2, .card strong');
-    for (var i = 0; i < heads.length; i++) if (heads[i].textContent.indexOf(target) !== -1) return heads[i].closest('.card') || heads[i];
-    return null;
+    var s = SECTIONS[name];
+    return s ? document.getElementById(s[0]) : null;
   }
   function goTo(name) {
     var node = findSection(name);
     if (!node) return false;
-    node.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    node.classList.add('jv-flash');
-    setTimeout(function () { node.classList.remove('jv-flash'); }, 1800);
+    var card = node.classList.contains('sec-title') ? node.nextElementSibling : (node.closest('.card') || node);
+    node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (card && card.classList) { card.classList.add('jv-flash'); setTimeout(function () { card.classList.remove('jv-flash'); }, 1800); }
     return true;
   }
+  function sectionLabel(name) { return SECTIONS[name] ? SECTIONS[name][1] : name; }
   function tradeStats(t) {
     var e = parseFloat(t.entry), s = parseFloat(t.stop), g = parseFloat(t.target);
     if (!isFinite(e) || !isFinite(s) || !isFinite(g)) return null;
@@ -256,39 +258,44 @@
     return { riskPips: risk * 10000, rewardPips: reward * 10000, rr: risk ? reward / risk : 0, valid: valid };
   }
   function summaryText() {
-    var d = getDb(), open = d.tasks.filter(function (t) { return t.status !== 'Done'; });
-    var approvals = d.tasks.filter(function (t) { return t.status === 'Needs approval'; });
-    var total = d.opps.reduce(function (a, o) { return a + (Number(o.value) || 0); }, 0);
-    var byDiv = { Cleaning: 0, Courier: 0 }, cleanTotal = 0;
-    d.opps.forEach(function (o) { byDiv[o.division] = (byDiv[o.division] || 0) + 1; if (o.division === 'Cleaning') cleanTotal += Number(o.value) || 0; });
-    var conn = (document.getElementById('connection') || {}).textContent || '';
+    var d = getDb(), v = V();
+    var conn = (document.getElementById('connection') || {}).textContent || 'unknown';
+    if (!v) return 'Dashboard data: ' + d.opps.length + ' opportunities, ' + d.tasks.length + ' tasks, ' + d.trades.length + ' paper trades.';
+    var k = v.kpis(), dl = v.deadlines(7);
     var lines = [
       'Vanguard briefing — ' + new Date().toLocaleString() + '.',
-      '• Pipeline: ' + d.opps.length + ' opportunit' + (d.opps.length === 1 ? 'y' : 'ies') + ' (' + byDiv.Cleaning + ' cleaning, ' + byDiv.Courier + ' courier)' + (total ? ', about ' + money(total) + '/month estimated.' : '.'),
-      '• Cleaning target: $15,000+/month' + (cleanTotal ? ' — cleaning pipeline estimates (' + money(cleanTotal) + ') would cover ' + Math.round(cleanTotal / 150) + '% of that if every one closed.' : '.'),
-      '• Assignments: ' + open.length + ' open, ' + approvals.length + ' awaiting your approval.',
-      '• Paper trades: ' + d.trades.length + ' logged (EUR/USD, simulation only).',
-      '• Connection: ' + (conn || 'unknown') + '.'
+      '• Contracts: ' + k.activeCount + ' active worth ' + money(k.pipeline) + '/mo (weighted ' + money(k.weighted) + '). Won ' + k.wonCount + ', lost ' + k.lostCount + (k.winRate != null ? ' — ' + k.winRate + '% win rate.' : '.'),
+      '• Won revenue: ' + money(k.wonRevenue) + '/mo. Cleaning is at ' + k.targetPct + '% of the $15,000 target.',
+      '• Deadlines this week: ' + (dl.length ? dl.map(function (x) { return x.name + ' (' + (x.d < 0 ? Math.abs(x.d) + 'd overdue' : x.d === 0 ? 'today' : 'in ' + x.d + 'd') + ')'; }).join('; ') : 'none') + '.',
+      '• Tasks: ' + k.openTasks + ' open, ' + k.approvals + ' awaiting your approval.',
+      '• Paper trading: balance ' + money(k.balance) + ', ' + k.openTrades + ' open (' + money(k.openPnl) + ' unrealised), ' + k.closedTrades + ' closed' + (k.tradeWinRate != null ? ', ' + k.tradeWinRate + '% winners' : '') + '. Sim price ' + v.sim.price().toFixed(5) + '.',
+      '• Connection: ' + conn + '.'
     ];
-    if (approvals.length) lines.push('Next step: review the approval queue — say “approvals”.');
-    else if (!d.opps.length) lines.push('Next step: add your first opportunity, e.g. “add cleaning opportunity Pensacola federal building $4000”.');
+    if (k.approvals) lines.push('Next step: review the approval queue — say “approvals”.');
+    else if (dl.some(function (x) { return x.d < 0; })) lines.push('Next step: something is overdue — say “deadlines”.');
+    else if (!d.opps.length) lines.push('Next step: add your first contract, e.g. “add cleaning opportunity Pensacola federal building $4000 due in 14 days”.');
     return lines.join('\n');
   }
   function helpText() {
     return [
-      'Here is what I can do offline:',
-      '• “briefing” / “status” — summary of the whole dashboard',
-      '• “show pipeline” — list opportunities',
-      '• “add cleaning opportunity <name> $<monthly>” (or courier)',
-      '• “open tasks” — list assignments',
-      '• “assign <agent> to <task>” e.g. assign Compliance to check SAM registration',
-      '• “add task <description>” (goes to Executive)',
-      '• “mark <task words> done” / “needs approval <task words>”',
-      '• “approvals” — what is waiting on you',
-      '• “paper trades” — positions with risk/reward',
-      '• “go to trading / pipeline / tasks / approvals / metrics / activity”',
-      '• “who is <agent>”, “agents”, “time”, “export”',
-      '• “voice on/off”, “stop”, “clear chat”, “settings”',
+      'Everything below works offline, while this page is open:',
+      'OVERVIEW',
+      '• “briefing” / “status” — full summary · “kpis” · “deadlines”',
+      'CONTRACTS',
+      '• “add cleaning opportunity <name> $<monthly> [due YYYY-MM-DD | due in N days]” (or courier)',
+      '• “show pipeline” · “move <name> to bid prep / submitted / won / lost”',
+      'TRADING SIM (paper money, simulated prices)',
+      '• “start market” / “pause market” · “price”',
+      '• “buy 0.2 lots stop 20 target 40” (pips) · “sell …”',
+      '• “positions” · “close trade 1” · “close all” · “account”',
+      '• “position size 1% 20 pips”',
+      'AGENTS & TASKS',
+      '• “assign <agent> to <task>” · “add task <task>” · “open tasks”',
+      '• “send <task> for approval” · “mark <task> done” · “approvals”',
+      '• “who is <agent>” · “agents”',
+      'OTHER',
+      '• “go to contracts / trading / agents / approvals / overview / activity”',
+      '• “time”, “export”, “voice on/off”, “stop”, “clear chat”, “settings”',
       aiReady() ? 'AI brain is ON — anything else goes to ' + PROVIDERS[settings.provider].label + '. Start with “ask …” to force it.' : 'AI brain is OFF. Tap ⚙ to add your own OpenAI or xAI key for open-ended questions.',
       'I never submit bids, contact anyone, or place real trades.'
     ].join('\n');
@@ -296,8 +303,8 @@
   function listOpps() {
     var d = getDb();
     if (!d.opps.length) return 'The pipeline is empty. Try “add courier opportunity hospital lab route $3500”.';
-    return 'Opportunity pipeline (' + d.opps.length + '):\n' + d.opps.map(function (o, i) {
-      return (i + 1) + '. ' + o.name + ' — ' + o.division + ', ' + (o.value ? money(o.value) + '/month est.' : 'value unverified');
+    return 'Contract pipeline (' + d.opps.length + '):\n' + d.opps.map(function (o, i) {
+      return (i + 1) + '. ' + o.name + ' — ' + o.division + ', ' + (o.stage || 'Lead') + ', ' + (o.value ? money(o.value) + '/mo' : 'value unverified') + (o.due ? ', due ' + o.due : '');
     }).join('\n');
   }
   function listTasks() {
@@ -305,7 +312,7 @@
     if (!d.tasks.length) return 'No assignments yet. Try “assign Contract Scout to find janitorial bids in Okaloosa”.';
     var done = d.tasks.length - open.length;
     return 'Open assignments (' + open.length + (done ? ', ' + done + ' done' : '') + '):\n' + (open.map(function (t, i) {
-      return (i + 1) + '. ' + t.name + ' — ' + t.owner + ' · ' + t.status;
+      return (i + 1) + '. ' + t.name + ' — ' + t.owner + ' · ' + t.status + (t.due ? ' · due ' + t.due : '');
     }).join('\n') || 'All assignments are done.');
   }
   function listApprovals() {
@@ -313,18 +320,27 @@
     if (!a.length) return 'Nothing is waiting for your approval.';
     return a.length + ' item' + (a.length > 1 ? 's' : '') + ' awaiting approval:\n' + a.map(function (t, i) { return (i + 1) + '. ' + t.name + ' (' + t.owner + ')'; }).join('\n') + '\nSay “mark <task words> done” after you review one.';
   }
+  function openTradesList() { return getDb().trades.filter(function (t) { return t.status !== 'Closed'; }); }
   function listTrades() {
-    var d = getDb();
-    if (!d.trades.length) return 'No paper trades logged. Use the Trading Lab form to journal one — it is simulation only.';
-    var rrs = [];
-    var lines = d.trades.map(function (t, i) {
-      var s = tradeStats(t);
-      if (s && s.valid) rrs.push(s.rr);
-      return (i + 1) + '. ' + t.side + ' EUR/USD @ ' + t.entry + ' · SL ' + t.stop + ' · TP ' + t.target +
-        (s ? ' → risk ' + s.riskPips.toFixed(1) + ' pips, reward ' + s.rewardPips.toFixed(1) + ' pips, R:R 1:' + s.rr.toFixed(2) + (s.valid ? '' : ' ⚠ stop/target on the wrong side for a ' + t.side) : '');
-    });
-    var avg = rrs.length ? rrs.reduce(function (a, b) { return a + b; }, 0) / rrs.length : 0;
-    return 'Paper trades (' + d.trades.length + '):\n' + lines.join('\n') + (rrs.length ? '\nAverage R:R 1:' + avg.toFixed(2) + '. No live prices are fetched, so open P&L is not available.' : '');
+    var d = getDb(), v = V();
+    if (!d.trades.length) return 'No paper trades yet. Say “start market”, then e.g. “buy 0.1 lots stop 20 target 40”.';
+    var price = v ? v.sim.price() : null;
+    var open = openTradesList(), closed = d.trades.filter(function (t) { return t.status === 'Closed'; });
+    var out = [];
+    if (open.length) {
+      out.push('Open positions (sim price ' + (price ? price.toFixed(5) : '?') + '):');
+      open.forEach(function (t, i) {
+        var s = tradeStats(t);
+        out.push((i + 1) + '. ' + t.side + ' ' + t.lots + ' lots @ ' + t.entry + ' · SL ' + t.stop + ' · TP ' + t.target +
+          (v ? ' → ' + money(v.tradePnl(t, price)) + ' (' + v.tradePips(t, price).toFixed(1) + ' pips)' : '') +
+          (s ? ', R:R 1:' + s.rr.toFixed(2) + (s.valid ? '' : ' ⚠ stop/target on the wrong side') : ''));
+      });
+    } else out.push('No open positions.');
+    if (closed.length && v) {
+      var k = v.kpis();
+      out.push('Closed: ' + closed.length + ' trades, realised ' + money(k.realized) + (k.tradeWinRate != null ? ', ' + k.tradeWinRate + '% winners' : '') + '. Balance ' + money(k.balance) + '.');
+    }
+    return out.join('\n');
   }
   function matchTask(words) {
     var q = words.toLowerCase().trim();
@@ -334,6 +350,26 @@
     if (/^#?\d+$/.test(q)) { var open = tasks.filter(function (t) { return t.status !== 'Done'; }); return open[n - 1] || null; }
     return tasks.find(function (t) { return t.name.toLowerCase().indexOf(q) !== -1; }) || null;
   }
+  function matchOpp(words) {
+    var q = words.toLowerCase().replace(/^(the\s+)?(opportunity|contract|opp)\s+/, '').trim();
+    if (!q) return null;
+    var opps = getDb().opps;
+    if (/^#?\d+$/.test(q)) return opps[parseInt(q.replace('#', ''), 10) - 1] || null;
+    return opps.find(function (o) { return o.name.toLowerCase().indexOf(q) !== -1; }) ||
+      opps.find(function (o) { return q.split(/\s+/).every(function (w) { return (o.name + ' ' + (o.agency || '')).toLowerCase().indexOf(w) !== -1; }); }) || null;
+  }
+  function normStage(s) {
+    s = s.toLowerCase().trim();
+    var map = { 'lead': 'Lead', 'qualifying': 'Qualifying', 'qualify': 'Qualifying', 'qualified': 'Qualifying', 'bid prep': 'Bid prep', 'bid': 'Bid prep', 'prep': 'Bid prep', 'preparing': 'Bid prep', 'submitted': 'Submitted', 'submit': 'Submitted', 'won': 'Won', 'win': 'Won', 'lost': 'Lost', 'lose': 'Lost' };
+    return map[s] || null;
+  }
+  function parseDue(s) {
+    var m;
+    if ((m = s.match(/(\d{4}-\d{2}-\d{2})/))) return m[1];
+    if ((m = s.match(/in\s+(\d+)\s+days?/i))) { var d = new Date(); d.setDate(d.getDate() + parseInt(m[1], 10)); return d.toISOString().slice(0, 10); }
+    if (/tomorrow/i.test(s)) { var t = new Date(); t.setDate(t.getDate() + 1); return t.toISOString().slice(0, 10); }
+    return '';
+  }
   function normOwner(s) {
     var q = s.toLowerCase().replace(/\bagent\b/g, '').trim();
     for (var i = 0; i < OWNERS.length; i++) if (OWNERS[i].toLowerCase() === q || OWNERS[i].toLowerCase().indexOf(q) === 0 && q.length > 3) return OWNERS[i];
@@ -342,35 +378,84 @@
     if (/^(me|ceo|exec)/.test(q)) return 'Executive';
     return null;
   }
+  function tradingCommand(q) {
+    var v = V(), m;
+    if (!v) return undefined;
+    if (/^(start|run|resume|play)\s+(the\s+)?(market|sim|simulation|feed|prices?)/.test(q)) { v.sim.start(); goTo('trading'); return 'Simulated EUR/USD market running from ' + v.sim.price().toFixed(5) + '. Remember, these are not real prices.'; }
+    if (/^(pause|stop|halt)\s+(the\s+)?(market|sim|simulation|feed|prices?)/.test(q)) { v.sim.stop(); return 'Simulated market paused at ' + v.sim.price().toFixed(5) + '.'; }
+    if (/^(price|quote|eur\/?usd|what'?s the price|current price)\b/.test(q) && !/\btrades?\b/.test(q)) return 'Simulated EUR/USD is ' + v.sim.price().toFixed(5) + (v.sim.running() ? ' and moving.' : ' (paused — say “start market”).');
+    if ((m = q.match(/^(buy|sell|long|short)\b(.*)$/))) {
+      var side = /buy|long/.test(m[1]) ? 'BUY' : 'SELL', rest = m[2];
+      var lots = (rest.match(/([\d.]+)\s*lots?/) || [])[1] || '0.1';
+      var stopP = parseFloat((rest.match(/(?:stop|sl)\s*(?:loss\s*)?(?:of\s*)?([\d.]+)/) || [])[1] || '20');
+      var tgtP = parseFloat((rest.match(/(?:target|tp|take profit)\s*(?:of\s*)?([\d.]+)/) || [])[1] || String(stopP * 2));
+      var p = v.sim.price(), dir = side === 'BUY' ? 1 : -1;
+      var r = v.openTrade({ side: side, lots: lots, stop: p - dir * stopP * 0.0001, target: p + dir * tgtP * 0.0001 });
+      if (r.error) return r.error;
+      goTo('trading');
+      return 'Paper ' + side + ' ' + r.lots + ' lots opened at ' + r.entry + ', stop ' + r.stop + ' (' + stopP + ' pips), target ' + r.target + ' (' + tgtP + ' pips). Risk ≈ ' + money(stopP * 10 * r.lots) + '.' + (v.sim.running() ? '' : ' The market is paused — say “start market” to watch it play out.');
+    }
+    if (/^close (all|everything)/.test(q)) {
+      var open = openTradesList(); if (!open.length) return 'No open positions.';
+      var total = 0; open.forEach(function (t) { var c = v.closeTrade(t.id); if (c) total += v.tradePnl(c); });
+      return 'Closed ' + open.length + ' position' + (open.length > 1 ? 's' : '') + ' at ' + v.sim.price().toFixed(5) + ' for ' + money(total) + '.';
+    }
+    if ((m = q.match(/^close (?:trade|position)?\s*#?(\d+)/))) {
+      var t = openTradesList()[parseInt(m[1], 10) - 1]; if (!t) return 'There is no open position #' + m[1] + '. Say “positions” to see them.';
+      var c2 = v.closeTrade(t.id); return 'Closed ' + c2.side + ' at ' + c2.exit + ' for ' + money(v.tradePnl(c2)) + '.';
+    }
+    if (/^(account|balance|equity|p&?l|pnl|profit)\b/.test(q)) { var k = v.kpis(); return 'Paper account: balance ' + money(k.balance) + ', open P&L ' + money(k.openPnl) + ', equity ' + money(k.balance + k.openPnl) + '. ' + k.closedTrades + ' closed trades' + (k.tradeWinRate != null ? ', ' + k.tradeWinRate + '% winners' : '') + '.'; }
+    if ((m = q.match(/^(?:position size|size|how many lots)\D*([\d.]+)\s*%?\D+([\d.]+)\s*pips?/))) {
+      var lotsOut = v.positionSize(parseFloat(m[1]), parseFloat(m[2]));
+      return 'Risking ' + m[1] + '% of ' + money(v.kpis().balance) + ' with a ' + m[2] + '-pip stop → about ' + lotsOut.toFixed(2) + ' lots (≈ $' + (lotsOut * 10).toFixed(2) + ' per pip).';
+    }
+    return undefined;
+  }
 
   // ---------- command router ----------
   function localCommand(raw) {
     var t = raw.trim(), q = t.toLowerCase().replace(/[.!?]+$/, '').replace(/^(hey |ok |okay )?jarvis[, ]*/, '').trim();
-    var m;
+    var m, v = V();
     if (!q) return 'Yes? Say “help” for options.';
     if (/^(help|commands|what can you do|\?)/.test(q)) return helpText();
     if (/^(hi|hello|hey|good (morning|afternoon|evening))\b/.test(q) && q.split(' ').length <= 3) return 'Good ' + partOfDay() + '. Ready when you are — say “briefing” for a status report.';
     if (/^(thanks|thank you)/.test(q)) return 'At your service.';
-    if (/^(briefing|status|summary|summarize|sitrep|report|overview|dashboard summary)\b/.test(q) || /^(give me|what'?s) (a |the |my )?(briefing|status|summary)/.test(q)) return summaryText();
+    if (/^(briefing|status|summary|summarize|sitrep|report|overview|dashboard summary)$/.test(q) || /^(give me|what'?s) (a |the |my )?(briefing|status|summary)/.test(q)) { goTo('overview'); return summaryText(); }
+    if (/^(kpis?|metrics|numbers|scoreboard)$/.test(q) && v) { var k = v.kpis(); goTo('overview'); return 'KPIs: active pipeline ' + money(k.pipeline) + '/mo · weighted ' + money(k.weighted) + ' · won ' + money(k.wonRevenue) + '/mo (' + k.targetPct + '% of cleaning target) · win rate ' + (k.winRate == null ? '—' : k.winRate + '%') + ' · ' + k.openTasks + ' open tasks · paper equity ' + money(k.balance + k.openPnl) + '.'; }
+    if (/^(deadlines?|what'?s due|due soon|upcoming)/.test(q) && v) { var dl = v.deadlines(21); goTo('overview'); return dl.length ? 'Due in the next 21 days:\n' + dl.map(function (x, i) { return (i + 1) + '. ' + x.name + ' — ' + x.type + ', ' + x.who + ', ' + x.due + ' (' + (x.d < 0 ? Math.abs(x.d) + ' days overdue' : x.d === 0 ? 'today' : 'in ' + x.d + ' days') + ')'; }).join('\n') : 'Nothing is due in the next 21 days.'; }
     if (/^(stop|quiet|silence|shut up)$/.test(q)) { stopSpeaking(); return null; }
     if (/^(voice|speech|talk) (on|enable)|^unmute/.test(q)) { settings.speak = true; storeSettings(); refreshHeader(); return 'Spoken replies on.'; }
     if (/^(voice|speech|talk) (off|disable)|^mute/.test(q)) { settings.speak = false; storeSettings(); refreshHeader(); stopSpeaking(); return 'Spoken replies off.'; }
     if (/^clear( the)? chat|^reset chat/.test(q)) { el.log.innerHTML = ''; history = []; try { sessionStorage.removeItem(CHAT_KEY); } catch (e) {} return 'Chat cleared.'; }
     if (/^(settings|api key|ai settings|set ?up ai|connect ai)/.test(q)) { fillSettings(); el.settings.classList.add('open'); return 'Settings are open. Pick OpenAI or xAI, paste your API key, and press Save.'; }
-    if (/^(what time|time|date|what'?s the date|today)/.test(q)) return 'It is ' + new Date().toLocaleString(undefined, { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + '.';
+    if (/^(what time|time|date|what'?s the date|today)$/.test(q)) return 'It is ' + new Date().toLocaleString(undefined, { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + '.';
     if (/^export/.test(q)) { var ex = document.getElementById('export'); if (ex) { ex.click(); return 'Exporting the dashboard data as JSON.'; } }
 
-    // add opportunity: "add cleaning opportunity <name> $4000"
+    var tr = tradingCommand(q);
+    if (tr !== undefined) return tr;
+
+    // add opportunity: "add cleaning opportunity <name> $4000 due in 10 days"
     if ((m = t.match(/^(?:add|new|track|create)\s+(?:a\s+|an\s+)?(cleaning|courier|janitorial|delivery)?\s*(?:opportunity|opp|contract|bid|solicitation)\s*[:\-]?\s*(.+)$/i))) {
       var div = /courier|delivery/i.test(m[1] || '') ? 'Courier' : /cleaning|janitorial/i.test(m[1] || '') ? 'Cleaning' : (/courier|delivery|route/i.test(m[2]) ? 'Courier' : 'Cleaning');
-      var rest = m[2], value = '';
+      var rest = m[2], value = '', due = '';
+      var dm = rest.match(/\s+(?:due|deadline|by)\s+(.+)$/i);
+      if (dm) { due = parseDue(dm[1]); rest = rest.slice(0, dm.index).trim(); }
       var vm = rest.match(/\$?\s*([\d,]+(?:\.\d+)?)\s*(k)?\s*(?:\/\s*(?:mo|month)|per month|a month|monthly)?\s*$/i);
       if (vm && (/\$/.test(vm[0]) || /month|mo\b|k/i.test(vm[0]))) { value = String(Math.round(parseFloat(vm[1].replace(/,/g, '')) * (vm[2] ? 1000 : 1))); rest = rest.slice(0, vm.index).trim(); }
       rest = rest.replace(/\s+(worth|at|for)$/i, '').trim();
       if (!rest) return 'What is the opportunity called? e.g. “add cleaning opportunity Navarre clinic $2500”.';
-      getDb().opps.push({ id: newId(), division: div, name: rest, value: value });
-      commit(); goTo('pipeline');
-      return 'Added to the ' + div + ' pipeline: “' + rest + '”' + (value ? ' at ' + money(value) + '/month est.' : ' (value unverified).');
+      if (v) v.addOpp({ division: div, name: rest, value: value, due: due });
+      else { getDb().opps.push({ id: newId(), division: div, name: rest, value: value, due: due, stage: 'Lead' }); commit(); }
+      goTo('contracts');
+      return 'Added to the ' + div + ' pipeline as a Lead: “' + rest + '”' + (value ? ' at ' + money(value) + '/month est' : ' (value unverified)') + (due ? ', due ' + due : '') + '.';
+    }
+    // move opportunity stage: "move navarre to submitted", "mark navarre won", "we won navarre"
+    if ((m = q.match(/^(?:move|set|change|advance)\s+(.+?)\s+(?:to|stage to|as)\s+(lead|qualifying|qualified|bid prep|bid|submitted|won|lost)$/)) ||
+        (m = q.match(/^(?:mark\s+)?(.+?)\s+(?:as\s+)?(won|lost|submitted)$/)) && matchOpp(m[1]) ||
+        (m = q.match(/^(?:we\s+)?(won|lost|submitted)\s+(?:the\s+)?(.+)$/)) && (m = [m[0], m[2], m[1]]) && matchOpp(m[1])) {
+      var o = matchOpp(m[1]), st0 = normStage(m[2]);
+      if (o && st0 && v) { v.setStage(o.id, st0); goTo('contracts'); return '“' + o.name + '” moved to ' + st0 + '.' + (st0 === 'Won' ? ' Congratulations — recorded locally.' : st0 === 'Submitted' ? ' (Recorded only — I did not submit anything.)' : ''); }
+      if (!o && /^(move|set|change|advance)/.test(q)) return 'I could not find a contract matching “' + m[1] + '”. Say “show pipeline” to see them.';
     }
 
     // assign: "assign <agent> to <task>"  /  "add task <task>" / "add task for <agent>: <task>"
@@ -382,7 +467,7 @@
       return addTask(owner || 'Executive', m[2]);
     }
 
-    // status changes
+    // task status changes
     if ((m = q.match(/^(?:mark|set)\s+(.+?)\s+(?:as\s+)?(done|complete|completed|finished|open|needs approval|for approval)$/)) ||
         (m = q.match(/^(complete|finish|done with)\s+(.+)$/)) && (m = [m[0], m[2], 'done']) ||
         (m = q.match(/^(?:send|submit)\s+(.+?)\s+(?:for|to)\s+approval$/)) && (m = [m[0], m[1], 'needs approval']) ||
@@ -391,49 +476,51 @@
       var task = matchTask(m[1].replace(/^(task|the task)\s+/, ''));
       if (!task) return 'I could not find a task matching “' + m[1] + '”. Say “open tasks” to see them.';
       var st = /approval/.test(m[2]) ? 'Needs approval' : /open/.test(m[2]) ? 'Open' : 'Done';
-      task.status = st; commit();
+      if (typeof window.setStatus === 'function') window.setStatus(task.id, st); else { task.status = st; commit(); }
       return 'Marked “' + task.name + '” as ' + st + '.' + (st === 'Done' && /^approve/.test(q) ? ' (Recorded locally only — nothing was submitted.)' : '');
     }
 
     // lists
     if (/\b(approval|approvals|pending|waiting on me|needs my)\b/.test(q)) { goTo('approvals'); return listApprovals(); }
-    if (/\b(pipeline|opportunit|contracts?|bids?|solicitations?)\b/.test(q) && !/\bwho\b/.test(q)) { goTo('pipeline'); return listOpps(); }
-    if (/\b(tasks?|assignments?|to-?dos?|board)\b/.test(q)) { goTo('tasks'); return listTasks(); }
-    if (/\b(trades?|positions?|trading|eur\/?usd|journal)\b/.test(q) && !/\bwho\b/.test(q)) { goTo('trading'); return listTrades(); }
+    if (/\b(pipeline|opportunit|contracts?|bids?|solicitations?)\b/.test(q) && !/\b(who|go to|open|scroll)\b/.test(q)) { goTo('contracts'); return listOpps(); }
+    if (/\b(tasks?|assignments?|to-?dos?|board)\b/.test(q) && !/\b(go to|scroll)\b/.test(q)) { goTo('tasks'); return listTasks(); }
+    if (/\b(trades?|positions?|journal)\b/.test(q) && !/\bwho\b/.test(q)) { goTo('trading'); return listTrades(); }
+
     // navigation
-    if ((m = q.match(/^(?:go to|goto|open|show me|scroll to|navigate to|take me to|jump to)\s+(?:the\s+)?([a-z]+)/))) {
+    if ((m = q.match(/^(?:go to|goto|open|show me|show|scroll to|navigate to|take me to|jump to)\s+(?:the\s+)?([a-z]+)/))) {
       var key = m[1];
       if (key === 'settings') return localCommand('settings');
-      if (SECTIONS[key] && goTo(key)) return 'Showing ' + SECTIONS[key] + '.';
+      if (SECTIONS[key] && goTo(key)) return 'Showing ' + sectionLabel(key) + '.';
     }
-
-    if (/^(agents|list agents|who are the agents|team)$/.test(q)) return 'Agents: Contract Scout, Partner Scout, Financial, Compliance, Operations and Trading. All dashboard connections are pending — they are not running yet. Ask “who is compliance” for details.';
+    if (/^(agents|list agents|who are the agents|team)$/.test(q)) { goTo('agents'); return 'Agents: Contract Scout, Partner Scout, Financial, Compliance, Operations and Trading. Their dashboard connections are pending — they are not running yet, so tasks you assign are tracked on the board. Ask “who is compliance” for details.'; }
     if ((m = q.match(/^(?:who is|what is|what does|tell me about)\s+(?:the\s+)?(.+?)(?:\s+agent)?(?:\s+do)?$/))) {
-      var k = Object.keys(AGENT_INFO).find(function (a) { return m[1].indexOf(a) !== -1 || a.indexOf(m[1]) === 0; });
-      if (k) return AGENT_INFO[k];
-      if (/jarvis|you/.test(m[1])) return 'I am Jarvis, the assistant built into Vanguard God\'s-Eye. ' + (aiReady() ? 'My AI brain is connected.' : 'I run offline; add an API key in ⚙ for an AI brain.');
+      var ak = Object.keys(AGENT_INFO).find(function (a) { return m[1].indexOf(a) !== -1 || a.indexOf(m[1]) === 0; });
+      if (ak) return AGENT_INFO[ak];
+      if (/jarvis|you/.test(m[1])) return 'I am Jarvis, the assistant built into Vanguard God\'s-Eye. I work while this page is open. ' + (aiReady() ? 'My AI brain is connected.' : 'Add an API key in ⚙ for an AI brain.');
     }
     if (/\b(connection|connected|server|sync)\b/.test(q)) { goTo('activity'); return ((document.getElementById('connection') || {}).textContent || 'Unknown') + ((document.getElementById('lastsync') || {}).textContent ? ' — ' + document.getElementById('lastsync').textContent : '') + '.'; }
-    if ((m = q.match(/^(?:show|go to)\s+(.+)$/)) && SECTIONS[m[1]]) { goTo(m[1]); return 'Showing ' + SECTIONS[m[1]] + '.'; }
     return undefined; // not a built-in command
   }
   function addTask(owner, name) {
     name = name.trim().replace(/[.]$/, '');
+    var due = '', dm = name.match(/\s+(?:due|by)\s+(\d{4}-\d{2}-\d{2}|in\s+\d+\s+days?|tomorrow)$/i);
+    if (dm) { due = parseDue(dm[1]); name = name.slice(0, dm.index).trim(); }
     if (!name) return 'What should the task say?';
-    getDb().tasks.push({ id: newId(), owner: owner, name: name, status: 'Open' });
-    commit(); goTo('tasks');
-    return 'Assigned to ' + owner + ': “' + name + '”. Status: Open. (The agent itself is not connected yet, so this is tracked on the board for now.)';
+    if (V()) V().addTask(owner, name, due);
+    else { getDb().tasks.push({ id: newId(), owner: owner, name: name, status: 'Open', due: due }); commit(); }
+    goTo('tasks');
+    return 'Assigned to ' + owner + ': “' + name + '”' + (due ? ', due ' + due : '') + '. Status: Open. (The agent itself is not connected yet, so this is tracked on the board.)';
   }
 
   // ---------- AI brain ----------
   function systemPrompt() {
-    var d = getDb();
+    var d = getDb(), v = V();
     return 'You are JARVIS, the AI assistant inside "Vanguard God\'s-Eye", an AI command center for Vanguard, a small business with a Cleaning Division (recurring janitorial contracts, subcontractor-first, target $15,000+/month, Escambia, Santa Rosa, Okaloosa and Walton counties, Florida) and a Courier Division (recurring delivery contracts). ' +
-      'The dashboard also has an EUR/USD paper-trading journal (simulation only, no live prices, no broker). Agents (Contract Scout, Partner Scout, Financial, Compliance, Operations, Trading) are planned but not connected. ' +
-      'Workflow is approval-first: never claim you submitted bids, contacted anyone, or placed trades — you cannot. Do not give personalised financial advice; frame trading discussion as education/risk management. ' +
+      'The dashboard has contracts management (stages Lead → Qualifying → Bid prep → Submitted → Won/Lost), an agent task board with a CEO approval queue, and an EUR/USD paper-trading simulator (random-walk simulated prices, paper money, no broker). Agents (Contract Scout, Partner Scout, Financial, Compliance, Operations, Trading) are planned but not connected. ' +
+      'Workflow is approval-first: never claim you submitted bids, contacted anyone, or placed trades — you cannot. You only run while the user has the page open. Do not give personalised financial advice; frame trading discussion as education/risk management. ' +
       'Be concise, confident and practical, with a light butler-like tone. Replies are often spoken aloud, so prefer short paragraphs and plain text (no markdown tables). ' +
-      'The user can also use offline commands like "add cleaning opportunity <name> $<monthly>", "assign <agent> to <task>", "mark <task> done", "briefing"; suggest these when they would help. ' +
-      'Current dashboard data (JSON): ' + JSON.stringify({ opportunities: d.opps, tasks: d.tasks, paperTrades: d.trades, now: new Date().toString() }).slice(0, 12000);
+      'The user can also use offline commands like "add cleaning opportunity <name> $<monthly> due in 14 days", "move <name> to submitted", "assign <agent> to <task>", "buy 0.1 lots stop 20 target 40", "briefing"; suggest these when they would help. ' +
+      'Current dashboard data (JSON): ' + JSON.stringify({ kpis: v ? v.kpis() : null, deadlines: v ? v.deadlines(30) : null, simPrice: v ? v.sim.price() : null, opportunities: d.opps, tasks: d.tasks, paperTrades: d.trades, now: new Date().toString() }).slice(0, 14000);
   }
   async function callAi(messages) {
     var res = await fetch(effectiveBase() + '/chat/completions', {
