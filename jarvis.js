@@ -172,7 +172,7 @@
   }
   function setPersona(p, announce) {
     settings.persona = p === 'streetwise' ? 'streetwise' : 'classic'; storeSettings(); applyPersona();
-    if (announce) say(settings.persona === 'streetwise' ? 'Street Wise mode on. Let’s get this money right — practical moves, no fluff.' : 'Classic mode restored. At your service.');
+    if (announce) say(settings.persona === 'streetwise' ? 'Street Wise mode on. Real talk, practical moves, no fluff. What we on?' : 'Classic mode restored. At your service.');
   }
   function setFull(on, quiet) {
     el.panel.classList.toggle('jv-full', !!on);
@@ -229,7 +229,7 @@
     if (saved.length) {
       saved.forEach(function (m) { addMsg(m.role === 'user' ? 'user' : 'bot', m.content); });
     } else {
-      addMsg('bot', settings.persona === 'streetwise' ? 'What’s good. Jarvis here, Street Wise mode. Say “youtube status”, “briefing”, or “help” — let’s make some smart money moves.' : 'Good ' + partOfDay() + '. I am Jarvis, your Vanguard command assistant. Say or type “help” to see what I can do, or “briefing” for a status report.');
+      addMsg('bot', settings.persona === 'streetwise' ? 'What’s good. Jarvis here, Street Wise mode. Say “youtube status”, “briefing”, or “help” — let’s get this money right.' : 'Good ' + partOfDay() + '. I am Jarvis, your Vanguard command assistant. Say or type “help” to see what I can do, or “briefing” for a status report.');
     }
   }
   function partOfDay() { var hr = new Date().getHours(); return hr < 12 ? 'morning' : hr < 18 ? 'afternoon' : 'evening'; }
@@ -280,7 +280,7 @@
       u.rate = 1.02; u.pitch = 0.95;
       u.onstart = function () { setState('speaking'); };
       u.onend = u.onerror = function () { if (hudState === 'speaking') setState('idle'); };
-      if (settings.persona === 'streetwise') { u.rate = 1.06; u.pitch = 0.9; }
+      if (settings.persona === 'streetwise') { u.rate = 1.0; u.pitch = 0.85; }
       speechSynthesis.speak(u);
     } catch (e) {}
   }
@@ -631,7 +631,7 @@
     if (/^(help|commands|what can you do|\?)/.test(q)) return helpText();
     if (/^(hi|hello|hey|good (morning|afternoon|evening))\b/.test(q) && q.split(' ').length <= 3) return 'Good ' + partOfDay() + '. Ready when you are — say “briefing” for a status report.';
     if (/^(thanks|thank you)/.test(q)) return settings.persona === 'streetwise' ? 'Anytime. Stay street wise.' : 'At your service.';
-    if (/^(street ?wise|money|green)\s+(mode|personality|persona)( on)?$|^(switch to|go|be)\s+street ?wise$/.test(q)) { setPersona('streetwise'); return 'Street Wise mode on. Let’s get this money right — practical moves, no fluff.'; }
+    if (/^(street ?wise|money|green)\s+(mode|personality|persona)( on)?$|^(switch to|go|be)\s+street ?wise$/.test(q)) { setPersona('streetwise'); return 'Street Wise mode on. Real talk, practical moves, no fluff. What we on?'; }
     if (/^(classic|normal|default|blue)\s+(mode|personality|persona)( on)?$|^(switch to|go|be)\s+classic$/.test(q)) { setPersona('classic'); return 'Classic mode restored. At your service.'; }
     if (/^(switch|change|toggle)\s+(personality|persona|mode)$/.test(q)) { setPersona(settings.persona === 'streetwise' ? 'classic' : 'streetwise'); return settings.persona === 'streetwise' ? 'Street Wise mode on.' : 'Classic mode on.'; }
     if (/^(full ?screen|expand|hud mode|maximi[sz]e)$/.test(q)) { setFull(true); return 'Full-screen HUD engaged. Press Esc to exit.'; }
@@ -738,7 +738,7 @@
     return 'You are JARVIS, the AI assistant inside "Vanguard God\'s-Eye", an AI command center for Vanguard, a small business with a Cleaning Division (recurring janitorial contracts, subcontractor-first, target $15,000+/month, Escambia, Santa Rosa, Okaloosa and Walton counties, Florida) and a Courier Division (recurring delivery contracts). ' +
       'The dashboard has contracts management (stages Lead → Qualifying → Bid prep → Submitted → Won/Lost), an agent task board with a CEO approval queue, and an EUR/USD paper-trading simulator (random-walk simulated prices, paper money, no broker). Agents (Contract Scout, Partner Scout, Financial, Compliance, Operations, Trading) are planned but not connected. ' +
       'Workflow is approval-first: never claim you submitted bids, contacted anyone, or placed trades — you cannot. You only run while the user has the page open. Do not give personalised financial advice; frame trading discussion as education/risk management. ' +
-      (settings.persona === 'streetwise' ? 'PERSONALITY: Street Wise — talk like the Street Wise Money host: confident, smooth, urban, practical and relatable, short punchy sentences, no fake wealth promises. ' : 'PERSONALITY: Classic — a calm, polished, light butler-like tone. ') + 'Be concise, confident and practical. Replies are often spoken aloud, so prefer short paragraphs and plain text (no markdown tables). ' +
+      (settings.persona === 'streetwise' ? "PERSONALITY: Street Wise — you talk like the homie who happens to know money. Real talk, warm, confident, a little funny, natural urban flavor: \"what's good\", \"nah\", \"for real\", \"check it\", \"bet\", \"let's get this money right\". Short punchy sentences, never corporate, never stiff. Sharp and respectful, no slurs, no clowning the user. " : 'PERSONALITY: Classic — a calm, polished, light butler-like tone. ') + 'Be concise, confident and practical. Replies are often spoken aloud, so prefer short paragraphs and plain text (no markdown tables). ' +
       'The user can also use offline commands like "add cleaning opportunity <name> $<monthly> due in 14 days", "move <name> to submitted", "assign <agent> to <task>", "buy 0.1 lots stop 20 target 40", "briefing"; suggest these when they would help. ' +
       (v && v.CHANNEL_BIBLE ? 'Vanguard also runs STREET WISE MONEY (' + v.CHANNEL_BIBLE.handle + '), a faceless YouTube channel with an avatar host. Channel bible: ' + JSON.stringify(v.CHANNEL_BIBLE) + '. Its agents: ' + v.YT_AGENTS.map(function (a) { return a[0] + ' (' + a[2] + ')'; }).join('; ') + '. Pipeline stages: ' + v.VIDEO_STAGES.join(' → ') + '. Never say a video was uploaded; uploads need the owner\'s approval and are done by the owner in YouTube Studio. Channel stats are entered manually by the owner; never invent live statistics. ' : '') +
       'Current dashboard data (JSON): ' + JSON.stringify({ streetWiseMoney: v && v.ytStatus ? { status: v.ytStatus(), videos: (d.videos || []).map(function (x) { return { title: x.title, topic: x.topic, stage: x.stage, approved: !!x.approved, publish: x.publish }; }) } : null, kpis: v ? v.kpis() : null, deadlines: v ? v.deadlines(30) : null, simPrice: v ? v.sim.price() : null, opportunities: d.opps, tasks: d.tasks, paperTrades: d.trades, now: new Date().toString() }).slice(0, 14000);
